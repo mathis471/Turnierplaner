@@ -30,7 +30,7 @@ function render(){
  if(state.view==="home")app.innerHTML=home();
  else if(state.view==="new")app.innerHTML=newTournament();
  else app.innerHTML=tournament();
- if(state.view==="new")drawPlayers();
+ if(state.view==="new"){drawPlayers();updateThirdPlaceOption();}
  applyBackground();
  if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
 }
@@ -50,16 +50,28 @@ function home(){
  <div class="footer">Die Turnierdaten werden nur auf diesem Gerät gespeichert.</div></div>`;
 }
 
+function thirdPlaceAvailable(){
+ const format=$("#format")?.value; const n=+( $("#pcount")?.value || 0 );
+ if(format==="ko") return n>=4;
+ const g=+( $("#gcount")?.value || 0 ); const q=+( $("#qcount")?.value || 0 );
+ return n>=4 && g>=1 && q>=1 && g*q>=4 && q<=Math.floor(n/g);
+}
+function updateThirdPlaceOption(){
+ const cb=$("#thirdPlace"); const wrap=$("#thirdPlaceWrap"); const hint=$("#thirdPlaceHint");
+ if(!cb)return; const ok=thirdPlaceAvailable(); cb.disabled=!ok; wrap.classList.toggle("disabled",!ok);
+ if(!ok){ cb.checked=false; hint.textContent="Nicht verfügbar: Es müssen mindestens 4 qualifizierte Spieler für zwei Halbfinals vorhanden sein."; }
+ else hint.textContent="Die beiden Halbfinal-Verlierer spielen automatisch um Platz 3.";
+}
 function newTournament(){
  if(!draftPlayers.length)draftPlayers=[""];
  return `<div class="app">${header()}<div class="section"><h1>Neues Turnier</h1><div class="card">
  <div class="field"><label>Turniername</label><input id="tname" placeholder="z. B. Sommer-Cup"></div>
- <div class="field"><label>Turnierformat</label><select id="format" onchange="toggleFormat()">
+ <div class="field"><label>Turnierformat</label><select id="format" onchange="toggleFormat();updateThirdPlaceOption()">
  <option value="groups">Gruppenphase → KO-Phase</option><option value="ko">Direkt KO-Phase</option></select></div>
  <div class="grid">
- <div class="field"><label>Anzahl Spieler</label><input id="pcount" type="number" min="2" max="128" value="${Math.max(2,draftPlayers.length)}" oninput="syncPlayerFields()"></div>
- <div class="field" id="gwrap"><label>Anzahl Gruppen</label><input id="gcount" type="number" min="1" max="32" value="4"></div>
- <div class="field" id="qwrap"><label>Weiterkommer je Gruppe</label><input id="qcount" type="number" min="1" value="2"></div>
+ <div class="field"><label>Anzahl Spieler</label><input id="pcount" type="number" min="2" max="128" value="${Math.max(2,draftPlayers.length)}" oninput="syncPlayerFields();updateThirdPlaceOption()"></div>
+ <div class="field" id="gwrap"><label>Anzahl Gruppen</label><input id="gcount" type="number" min="1" max="32" value="4" oninput="updateThirdPlaceOption()"></div>
+ <div class="field" id="qwrap"><label>Weiterkommer je Gruppe</label><input id="qcount" type="number" min="1" value="2" oninput="updateThirdPlaceOption()"></div>
  </div>
  <div class="field"><label>Grundmodus</label><select id="baseMode">${modes(3)}</select></div>
  <div class="notice">Der Grundmodus gilt für Gruppenspiele und für KO-Runden bis zum Halbfinale. Halbfinale und Finale können darunter separat eingestellt werden.</div>
@@ -67,6 +79,7 @@ function newTournament(){
  <label class="check"><input id="semiDifferent" type="checkbox" onchange="toggleSpecialModes()"> <span>Halbfinale soll einen anderen Modus haben</span></label>
  <div class="field" id="semiWrap" style="display:none"><label>Modus Halbfinale</label><select id="semiMode">${modes(5)}</select></div>
  <label class="check"><input id="finalDifferent" type="checkbox" onchange="toggleSpecialModes()"> <span>Finale soll einen anderen Modus haben</span></label>
+ <label class="check optional-check" id="thirdPlaceWrap"><input id="thirdPlace" type="checkbox"> <span><b>🥉 Spiel um Platz 3</b><small id="thirdPlaceHint" class="hint">Die beiden Halbfinal-Verlierer spielen automatisch um Platz 3.</small></span></label>
  <div class="field" id="finalWrap" style="display:none"><label>Modus Finale</label><select id="finalMode">${modes(7)}</select></div>
  </div>
  <div class="section"><h2>Spieler</h2><p class="muted">Hier kannst du die Namen direkt beim Erstellen eingeben.</p>
@@ -105,7 +118,7 @@ function createTournament(){
  if(format==="groups"&&(g<1||g>n||n%g!==0))return alert("Die Spielerzahl muss gleichmäßig auf die Gruppen verteilt werden.");
  if(format==="groups"&&q<1||format==="groups"&&q>n/g)return alert("Zu viele Weiterkommer für die Gruppengröße.");
  let players=draftPlayers.slice(0,n).map((x,i)=>x.trim()||`Spieler ${i+1}`);
- const t={id:uid(),name,format,baseMode,semiMode,finalMode,players,groups:[],matches:[],ko:{rounds:[],champion:null},created:Date.now(),q};
+ const t={id:uid(),name,format,baseMode,semiMode,finalMode,players,groups:[],matches:[],ko:{rounds:[],champion:null,thirdPlace:null},created:Date.now(),q,thirdPlace:$("#thirdPlace")?.checked===true};
  if(format==="groups")buildGroups(t,g); else buildKO(t);
  state.tournaments.unshift(t);state.current=t.id;state.view="tournament";state.tab="overview";draftPlayers=[];save();render();
 }
@@ -210,7 +223,7 @@ function allKOmatches(t){
 }
 function playerStats(t){
  const stats=Object.fromEntries(t.players.map(p=>[p,{p,legs:0,won:0,lost:0,matches:0}]));
- const all=[...(t.matches||[]),...allKOmatches(t)];
+ const all=[...(t.matches||[]),...allKOmatches(t),...(t.ko?.thirdPlace?[t.ko.thirdPlace]:[])];
  all.filter(m=>m.sa!=null&&m.sb!=null&&m.a&&m.b).forEach(m=>{
   const A=stats[m.a],B=stats[m.b]; if(!A||!B)return;
   A.legs+=m.sa+m.sb; B.legs+=m.sa+m.sb;
@@ -236,7 +249,7 @@ function overview(t){
  ${stats.map((x,i)=>`<tr><td>${i+1}</td><td><b>${esc(x.p)}</b></td><td>${x.matches}</td><td>${x.legs}</td><td>${x.won}</td><td>${x.lost}</td><td><div class="percent-cell"><div class="percent-bar"><span style="width:${x.pct}%"></span></div><b>${x.pct}%</b></div></td></tr>`).join("")}
  </table></div></div>`;
 }
-function groups(t){return `<div class="grid">${t.groups.map(g=>`<div class="group"><div class="grouphead">${esc(g.name)} <span class="muted">· ${g.players.length} Spieler</span></div><div style="padding:12px">${g.players.map(p=>`<div class="player" style="margin:6px 0">${esc(p)}</div>`).join("")}</div></div>`).join("")}</div>`}
+function groups(t){return `<div class="grid groups-page">${t.groups.map(g=>`<div class="group"><div class="grouphead">${esc(g.name)} <span class="muted">· ${g.players.length} Spieler</span></div><div style="padding:12px">${g.players.map(p=>`<div class="player" style="margin:6px 0">${esc(p)}</div>`).join("")}</div></div>`).join("")}</div>`}
 function matches(t){
  return `<div class="grid">${t.groups.map(g=>`<div class="card"><h3>${esc(g.name)}</h3>${t.matches.filter(m=>m.group===g.id).map(matchHTML).join("")}</div>`).join("")}</div>`;
 }
@@ -294,9 +307,33 @@ function startKO(){
  if(!createKOFromGroups(t))return alert("Es sind noch nicht genügend qualifizierte Spieler vorhanden.");
  save();state.tab="ko";render();
 }
+function syncThirdPlace(t){
+ if(!t.thirdPlace || !t.ko?.rounds?.length) return;
+ const semi=t.ko.rounds.find(r=>r.name==="Halbfinale");
+ if(!semi || semi.matches.length<2 || semi.matches.some(m=>m.sa==null)) return;
+ const a=winnerOf({sa:semi.matches[0].sb,sb:semi.matches[0].sa,a:semi.matches[0].b,b:semi.matches[0].a});
+ const b=winnerOf({sa:semi.matches[1].sb,sb:semi.matches[1].sa,a:semi.matches[1].b,b:semi.matches[1].a});
+ if(!a || !b) return;
+ const mode=t.semiMode;
+ if(!t.ko.thirdPlace || t.ko.thirdPlace.a!==a || t.ko.thirdPlace.b!==b){
+   t.ko.thirdPlace={id:uid(),name:"Spiel um Platz 3",a,b,sa:null,sb:null,mode};
+ }
+}
+function thirdPlaceHTML(t){
+ const m=t.ko.thirdPlace; if(!m)return "";
+ const finished=m.sa!=null,winner=finished?(m.sa>m.sb?m.a:m.b):null;
+ return `<div class="card third-place-card"><div class="between row"><div><h3>🥉 Spiel um Platz 3</h3><p class="muted">Best of ${m.mode} · Halbfinal-Verlierer</p></div><span class="pill">${finished?"Abgeschlossen":"Offen"}</span></div><div class="third-place-match"><div class="teamline ${winner===m.a?"winner":""}"><span>${winner===m.a?"✓ ":""}${esc(m.a)}</span><b>${m.sa??"—"}</b></div><div class="teamline ${winner===m.b?"winner":""}"><span>${winner===m.b?"✓ ":""}${esc(m.b)}</span><b>${m.sb??"—"}</b></div>${!finished?`<div class="score"><input id="tpa-${m.id}" type="number" min="0"><b>:</b><input id="tpb-${m.id}" type="number" min="0"><button class="primary small" onclick="saveThirdPlace()">OK</button></div>`:""}</div></div>`;
+}
+function saveThirdPlace(){
+ const t=current(),m=t.ko.thirdPlace; if(!m)return;
+ const a=+$("#tpa-"+m.id).value,b=+$("#tpb-"+m.id).value,need=Math.ceil(m.mode/2);
+ if(!Number.isInteger(a)||!Number.isInteger(b)||a<0||b<0||a===b||((a!==need)&&(b!==need))||Math.max(a,b)>need) return alert(`Ungültiges Ergebnis. Bei Best of ${m.mode} muss ein Spieler ${need} Legs gewinnen.`);
+ m.sa=a;m.sb=b;save();render();
+}
 function koView(t){
+ syncThirdPlace(t);
  if(!t.ko.rounds.length)return `<div class="card"><h3>KO-Phase</h3><p class="muted">Noch nicht erstellt.</p></div>`;
- return `<div class="bracket">${t.ko.rounds.map((r,ri)=>`<div class="round"><h3>${esc(r.name)} · Best of ${r.matches[0]?.mode||t.baseMode}</h3>${r.matches.map((m,mi)=>koMatchHTML(ri,mi,m)).join("")}</div>`).join("")}</div>`;
+ return `${thirdPlaceHTML(t)}<div class="bracket">${t.ko.rounds.map((r,ri)=>`<div class="round"><h3>${esc(r.name)} · Best of ${r.matches[0]?.mode||t.baseMode}</h3>${r.matches.map((m,mi)=>koMatchHTML(ri,mi,m)).join("")}</div>`).join("")}</div>`;
 }
 function koMatchHTML(ri,mi,m){
  const finished=m.sa!=null,winner=finished?(m.sa>m.sb?m.a:m.b):null;
@@ -312,7 +349,8 @@ function saveKO(ri,mi){
   return alert(`Ungültiges Ergebnis. Bei Best of ${m.mode} muss ein Spieler ${need} Legs gewinnen.`);
  m.sa=a;m.sb=b;
  propagateKO(t,ri);
+ syncThirdPlace(t);
  save();render();
 }
-window.nav=nav;window.addPlayer=()=>{};window.drawPlayers=drawPlayers;window.toggleFormat=toggleFormat;window.toggleSpecialModes=toggleSpecialModes;window.syncPlayerFields=syncPlayerFields;window.createTournament=createTournament;window.openT=openT;window.delT=delT;window.saveMatch=saveMatch;window.startKO=startKO;window.saveKO=saveKO;
+window.nav=nav;window.addPlayer=()=>{};window.drawPlayers=drawPlayers;window.toggleFormat=toggleFormat;window.toggleSpecialModes=toggleSpecialModes;window.syncPlayerFields=syncPlayerFields;window.createTournament=createTournament;window.openT=openT;window.delT=delT;window.saveMatch=saveMatch;window.startKO=startKO;window.saveKO=saveKO;window.saveThirdPlace=saveThirdPlace;window.updateThirdPlaceOption=updateThirdPlaceOption;
 render();
