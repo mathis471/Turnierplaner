@@ -7,6 +7,7 @@ try {
  state={tournaments:[],current:null,view:"home",tab:"overview"};
 }
 let draftPlayers=[];
+state.exportPreview = state.exportPreview || null;
 
 function save(){
  try{localStorage.setItem(KEY,JSON.stringify(state));}
@@ -31,6 +32,7 @@ function render(){
  else if(state.view==="new")app.innerHTML=newTournament();
  else app.innerHTML=tournament();
  if(state.view==="new"){drawPlayers();updateThirdPlaceOption();}
+ if(state.exportPreview) app.insertAdjacentHTML("beforeend", exportPreviewModal(state.exportPreview));
  applyBackground();
  if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
 }
@@ -243,6 +245,7 @@ function overview(t){
  ${groupFinished&&t.format==="groups"&&!t.ko.rounds.length?`<div class="card section success"><h3>KO-Phase wurde automatisch erstellt</h3><p>${t.q*t.groups.length} Spieler qualifiziert – eine gültige Zweierpotenz.</p><button class="primary" onclick="state.tab='ko';render()">KO-Baum anzeigen</button></div>`:""}
  ${t.ko.champion?`<div class="champion"><div class="pill">🏆 TURNIERSIEGER</div><h2>${playerButton(t.ko.champion)}</h2>${places.second?`<p>🥈 ${playerButton(places.second)}</p>`:""}${places.third?`<p>🥉 ${playerButton(places.third)}</p>`:""}</div>`:""}
  ${placementCard(t)}
+ <div class="card section export-card"><div class="between row"><div><h3>📸 Turnier als Bild</h3><p class="muted">Erstellt ein vollständiges Turnierposter mit Gruppen, allen Spielen, KO-Baum, Platzierungen und Spielerstatistiken.</p></div><button class="primary" onclick="generateTournamentImage()">📸 Bild erstellen</button></div></div>
  <div class="card section"><div class="between row"><div><h3>Spielerübersicht</h3><p class="muted">Spieler anklicken für das Profil.</p></div></div><div class="tablewrap"><table class="overview-table">
  <tr><th>#</th><th>Spieler</th><th>Spiele</th><th>Legs</th><th>S</th><th>N</th>${t.useAverage?"<th>Average</th>":""}<th>Gewonnen %</th></tr>
  ${stats.map((x,i)=>`<tr><td>${i+1}</td><td>${playerButton(x.p)}</td><td>${x.matches}</td><td>${x.legs}</td><td>${x.won}</td><td>${x.lost}</td>${t.useAverage?`<td>${x.average!=null?x.average.toFixed(2):"—"}</td>`:""}<td><div class="percent-cell"><div class="percent-bar"><span style="width:${x.pct}%"></span></div><b>${x.pct}%</b></div></td></tr>`).join("")}
@@ -361,6 +364,82 @@ function saveKO(ri,mi){
  if(t.useAverage){const va=$("#kavga-"+ri+"-"+mi)?.value.trim(),vb=$("#kavgb-"+ri+"-"+mi)?.value.trim(),aa=Number(va),bb=Number(vb);if(!va||!vb||!Number.isFinite(aa)||!Number.isFinite(bb)||aa<=0||bb<=0||aa>200||bb>200)return alert("Bitte beide Averages eingeben.");m.avgA=aa;m.avgB=bb;}
  m.sa=a;m.sb=b;propagateKO(t,ri);syncThirdPlace(t);save();render();
 }
+
+function exportMatchLabel(m){
+ const a=m.a||"Noch offen",b=m.b||"Noch offen";
+ const score=m.sa!=null&&m.sb!=null?`${m.sa} : ${m.sb}`:"offen";
+ let extra="";
+ if(current()?.useAverage) extra=` · Avg ${m.avgA!=null?Number(m.avgA).toFixed(1):"—"} / ${m.avgB!=null?Number(m.avgB).toFixed(1):"—"}`;
+ return `${a} – ${b} · ${score}${extra}`;
+}
+function allTournamentMatches(t){
+ const group=t.matches||[];
+ const ko=(t.ko?.rounds||[]).flatMap(r=>r.matches.map(m=>({...m,roundName:r.name})));
+ const third=t.ko?.thirdPlace?[{...t.ko.thirdPlace,roundName:"Spiel um Platz 3"}]:[];
+ return [...group.map(m=>({...m,roundName:m.group?((t.groups.find(g=>g.id===m.group)||{}).name||"Gruppe"):"Gruppenphase"})),...ko,...third];
+}
+function exportPreviewModal(data){
+ return `<div class="modal-backdrop export-modal" onclick="closeExportPreview()"><div class="export-modal-card" onclick="event.stopPropagation()"><div class="row between"><div><span class="pill">TURNIERPOSTER</span><h2>Dein Turnierbild</h2></div><button class="secondary small" onclick="closeExportPreview()">Schließen</button></div><div class="export-preview-wrap"><img src="${data}" alt="Turnierposter Vorschau"></div><div class="row export-actions"><button class="primary" onclick="shareTournamentImage()">↗️ Teilen / speichern</button><button class="secondary" onclick="downloadTournamentImage()">⬇️ PNG speichern</button></div><p class="hint">Das Bild wird vollständig auf diesem Gerät erzeugt. Es werden keine Turnierdaten hochgeladen.</p></div></div>`;
+}
+function closeExportPreview(){state.exportPreview=null;state.exportImageBlob=null;state.exportImageData=null;save();render();}
+function dataUrlToBlob(dataUrl){const [head,b64]=dataUrl.split(',');const mime=(head.match(/:(.*?);/)||[])[1]||'image/png';const bin=atob(b64);const arr=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);return new Blob([arr],{type:mime});}
+async function posterCanvas(t){
+ const W=2400, pad=90, gap=42, colW=(W-pad*2-gap)/2;
+ const stats=playerStats(t), groups=t.groups||[], groupRows=groups.map(g=>standings(t,g));
+ const all=allTournamentMatches(t);
+ const matchCount=all.length;
+ const groupLineH=44, groupHead=92, groupTableHead=54;
+ const groupHeights=groupRows.map(rows=>groupHead+groupTableHead+rows.length*groupLineH+28);
+ const groupCols=groups.length>2?2:Math.max(1,groups.length);
+ let groupSectionH=0;
+ if(groups.length){for(let r=0;r<Math.ceil(groups.length/groupCols);r++){let rowH=0;for(let ci=0;ci<groupCols;ci++){const gi=r*groupCols+ci;rowH=Math.max(rowH,groupHeights[gi]||0)}groupSectionH+=rowH+26}groupSectionH+=80;}
+ const koRounds=t.ko?.rounds||[];
+ const koH=koRounds.length?Math.max(420,koRounds[0].matches.length*105+150):0;
+ const statsRows=Math.ceil(stats.length/2), statsH=Math.max(220,110+statsRows*62);
+ const matchCols=matchCount>160?4:matchCount>80?3:2;
+ const matchRows=Math.ceil(matchCount/matchCols), matchRowH=46, matchesH=120+matchRows*matchRowH;
+ const thirdH=t.ko?.thirdPlace?205:0;
+ const totalH=420+groupSectionH+(koRounds.length?koH+50:0)+thirdH+matchesH+statsH+220;
+ const c=document.createElement('canvas');c.width=W;c.height=Math.max(1600,Math.min(totalH,32000));const ctx=c.getContext('2d');
+ ctx.imageSmoothingEnabled=true;
+ const bg=new Image();bg.src='dart-background.jpg';
+ try{if(bg.decode) await bg.decode();else await new Promise((resolve,reject)=>{bg.onload=resolve;bg.onerror=reject});}catch(e){}
+ let y=0;
+ function roundedRect(x,y,w,h,r){ctx.beginPath();ctx.roundRect(x,y,w,h,r)}
+ function panel(x,y,w,h,alpha=.86){roundedRect(x,y,w,h,28);ctx.fillStyle=`rgba(5,10,20,${alpha})`;ctx.fill();ctx.strokeStyle='rgba(255,255,255,.18)';ctx.lineWidth=2;ctx.stroke()}
+ function text(txt,x,y,size=30,weight='600',color='#fff',align='left'){ctx.fillStyle=color;ctx.font=`${weight} ${size}px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif`;ctx.textAlign=align;ctx.textBaseline='middle';ctx.fillText(String(txt),x,y)}
+ function line(x1,y1,x2,y2,color='rgba(255,255,255,.14)',width=2){ctx.strokeStyle=color;ctx.lineWidth=width;ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke()}
+ function fit(txt,max,size=28,weight='600'){let fs=size;while(fs>14){ctx.font=`${weight} ${fs}px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif`;if(ctx.measureText(String(txt)).width<=max)return fs;fs-=1}return fs}
+ ctx.fillStyle='#07101b';ctx.fillRect(0,0,W,c.height);
+ if(bg.complete&&bg.naturalWidth){const scale=Math.max(W/bg.naturalWidth,c.height/bg.naturalHeight);const iw=bg.naturalWidth*scale,ih=bg.naturalHeight*scale;ctx.globalAlpha=.34;ctx.drawImage(bg,(W-iw)/2,(c.height-ih)/2,iw,ih);ctx.globalAlpha=1}
+ ctx.fillStyle='rgba(2,7,15,.48)';ctx.fillRect(0,0,W,c.height);
+ panel(pad,55,W-pad*2,260,.78);text('🎯 DART-TURNIER',pad+40,115,54,'950','#fff');text(t.name,pad+40,185,42,'800','#f8fafc');
+ const info=[`${t.players.length} Spieler`,`${t.groups.length?t.groups.length+' Gruppen':'Direkt KO'}`,`${matchCount} Spiele`,t.useAverage?'Average erfasst':'Average nicht erfasst'];
+ info.forEach((v,i)=>text(v,W-pad-40-i*300,115,25,'800',i===0?'#fed7aa':'#e5e7eb','right'));
+ const places=placementSummary(t);if(places.first)text(`🏆 ${places.first}`,W-pad-40,185,32,'900','#fbbf24','right');
+ y=355;
+ if(places.first||places.second||places.third||places.fourth){panel(pad,y,W-pad*2,180,.86);text('PLATZIERUNGEN',pad+30,y+42,27,'900','#fed7aa');[['🥇',places.first],['🥈',places.second],['🥉',places.third],['4️⃣',places.fourth]].forEach((it,i)=>{const x=pad+30+i*((W-pad*2-60)/4);text(it[0],x,y+105,30,'900');text(it[1]||'—',x+48,y+105,24,'800','#fff')});y+=215}
+ if(groups.length){text('GRUPPENPHASE',pad,y+25,34,'950','#fff');y+=70;for(let r=0;r<Math.ceil(groups.length/groupCols);r++){let rowH=0;for(let ci=0;ci<groupCols;ci++){const gi=r*groupCols+ci;rowH=Math.max(rowH,groupHeights[gi]||0)}for(let ci=0;ci<groupCols;ci++){const gi=r*groupCols+ci;if(gi>=groups.length)continue;const x=pad+ci*(colW+gap),rows=groupRows[gi],gh=groupHeights[gi];panel(x,y,colW,gh,.88);text(groups[gi].name,x+28,y+38,28,'900','#fff');text(`Top ${t.q}`,x+colW-28,y+38,20,'800','#fed7aa','right');line(x+22,y+70,x+colW-22,y+70);['#','Spieler','Sp','S','N','Legs','Diff.','Pkt'].forEach((h,ii)=>{const xs=[x+25,x+75,x+colW-380,x+colW-320,x+colW-260,x+colW-195,x+colW-105,x+colW-28][ii];text(h,xs,y+88,15,'900','#aeb9c8',ii>1?'right':'left')});rows.forEach((st,i)=>{const yy=y+125+i*groupLineH;if(i<t.q){ctx.fillStyle='rgba(249,115,22,.10)';ctx.fillRect(x+15,yy-18,colW-30,36)}text(i+1,x+25,yy,18,'900',i<t.q?'#fed7aa':'#cbd5e1');text(st.p,x+75,yy,fit(st.p,colW-500,19,'700'),'700','#fff');text(st.w+st.l,x+colW-380,yy,18,'700','#fff','right');text(st.w,x+colW-320,yy,18,'700','#fff','right');text(st.l,x+colW-260,yy,18,'700','#fff','right');text(`${st.wl}:${st.ll}`,x+colW-195,yy,18,'700','#fff','right');text((st.wl-st.ll>0?'+':'')+(st.wl-st.ll),x+colW-105,yy,18,'700','#fff','right');text(st.pts,x+colW-28,yy,18,'900','#fff','right')})}y+=rowH+26}y+=28}
+ if(koRounds.length){text('KO-PHASE',pad,y+25,34,'950','#fff');y+=70;const x=pad,w=W-pad*2;panel(x,y,w,koH,.88);const roundW=(w-60-(koRounds.length-1)*28)/koRounds.length;koRounds.forEach((r,ri)=>{const rx=x+30+ri*(roundW+28);text(r.name,rx,y+34,20,'900','#fed7aa');const matches=r.matches;const spacing=(koH-95)/Math.max(1,matches.length);matches.forEach((m,mi)=>{const my=y+72+mi*spacing,h=Math.min(92,Math.max(58,spacing-14));roundedRect(rx,my,roundW,h,14);ctx.fillStyle='rgba(2,6,23,.78)';ctx.fill();ctx.strokeStyle='rgba(255,255,255,.18)';ctx.stroke();text(m.a||'Noch offen',rx+16,my+24,fit(m.a||'Noch offen',roundW-85,17,'700'),'700',winnerOf(m)===m.a?'#86efac':'#f8fafc');text(m.sa!=null?m.sa:'—',rx+roundW-16,my+24,20,'900','#fff','right');text(m.b||'Noch offen',rx+16,my+h-24,fit(m.b||'Noch offen',roundW-85,17,'700'),'700',winnerOf(m)===m.b?'#86efac':'#f8fafc');text(m.sb!=null?m.sb:'—',rx+roundW-16,my+h-24,20,'900','#fff','right')});if(ri<koRounds.length-1)line(rx+roundW,y+koH/2,rx+roundW+28,y+koH/2,'rgba(251,146,60,.55)',3)});y+=koH+50}
+ if(t.ko?.thirdPlace){panel(pad,y,W-pad*2,170,.9);text('🥉 SPIEL UM PLATZ 3',pad+30,y+40,27,'900','#fed7aa');text(`${t.ko.thirdPlace.a||'—'}  ${t.ko.thirdPlace.sa??'—'} : ${t.ko.thirdPlace.sb??'—'}  ${t.ko.thirdPlace.b||'—'}`,pad+30,y+100,25,'800');if(t.useAverage)text(`Avg ${t.ko.thirdPlace.avgA!=null?Number(t.ko.thirdPlace.avgA).toFixed(1):'—'} / ${t.ko.thirdPlace.avgB!=null?Number(t.ko.thirdPlace.avgB).toFixed(1):'—'}`,W-pad-30,y+100,20,'700','#cbd5e1','right');y+=205}
+ text('ALLE GESPIELTEN BEGEGNUNGEN',pad,y+25,34,'950','#fff');y+=70;panel(pad,y,W-pad*2,matchesH,.88);const mw=(W-pad*2-70)/matchCols;all.forEach((m,i)=>{const col=i%matchCols,row=Math.floor(i/matchCols),xx=pad+25+col*mw,yy=y+48+row*matchRowH;const label=m.roundName||'Spiel';text(label,xx,yy,14,'800','#fed7aa');text(`${m.a||'—'} – ${m.b||'—'}`,xx+95,yy,fit(`${m.a||'—'} – ${m.b||'—'}`,mw-260,15,'700'),'700','#fff');text(m.sa!=null?`${m.sa} : ${m.sb}`:'offen',xx+mw-110,yy,15,'900','#fff','right');if(t.useAverage)text(`${m.avgA!=null?Number(m.avgA).toFixed(1):'—'} / ${m.avgB!=null?Number(m.avgB).toFixed(1):'—'}`,xx+mw-10,yy,13,'700','#cbd5e1','right');line(xx,yy+19,xx+mw-10,yy+19)});y+=matchesH+50;
+ text('SPIELERSTATISTIK',pad,y+25,34,'950','#fff');y+=70;panel(pad,y,W-pad*2,statsH,.88);stats.forEach((st,i)=>{const col=i%2,row=Math.floor(i/2),sx=pad+30+col*(W-pad*2-60)/2,sy=y+70+row*62,boxW=(W-pad*2-90)/2;roundedRect(sx,sy-24,boxW,48,12);ctx.fillStyle='rgba(255,255,255,.045)';ctx.fill();text(`${i+1}. ${st.p}`,sx+15,sy,fit(`${i+1}. ${st.p}`,boxW-500,18,'800'),'800','#fff');text(`${st.matches} Sp. · ${st.won}:${st.lost} Legs`,sx+boxW-(t.useAverage?180:15),sy,17,'700','#cbd5e1','right');if(t.useAverage)text(`Avg ${st.average!=null?st.average.toFixed(2):'—'}`,sx+boxW-15,sy,18,'900','#fed7aa','right')});
+ text('Erstellt lokal in Dart Turnier',W-pad,c.height-38,17,'700','rgba(255,255,255,.65)','right');
+ return c;
+}
+async function generateTournamentImage(){
+ const t=current();if(!t)return;
+ const c=await posterCanvas(t);
+ c.toBlob(blob=>{if(!blob)return;const reader=new FileReader();reader.onload=()=>{state.exportImageBlob=blob;state.exportImageData=reader.result;state.exportPreview=reader.result;render()};reader.readAsDataURL(blob)},'image/png');
+}
+function downloadTournamentImage(){
+ if(!state.exportImageBlob)return;const url=URL.createObjectURL(state.exportImageBlob);const a=document.createElement('a');a.href=url;a.download=`${(current()?.name||'Dart-Turnier').replace(/[^a-z0-9äöüß _-]/gi,'').trim().replace(/\s+/g,'-')||'dart-turnier'}-ergebnis.png`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+async function shareTournamentImage(){
+ if(!state.exportImageBlob)return;
+ const t=current(),name=`${(t?.name||'Dart-Turnier').replace(/[^a-z0-9äöüß _-]/gi,'').trim().replace(/\s+/g,'-')||'dart-turnier'}-ergebnis.png`;
+ try{const file=new File([state.exportImageBlob],name,{type:'image/png'});if(navigator.share&&(!navigator.canShare||navigator.canShare({files:[file]}))){await navigator.share({title:t?.name||'Dart-Turnier',text:'Turnierergebnis',files:[file]});}else downloadTournamentImage();}catch(e){if(e?.name!=='AbortError')downloadTournamentImage();}
+}
 function openProfile(player){state.profilePlayer=player;save();render()}
 function closeProfile(){state.profilePlayer=null;save();render()}
 function playerProfileModal(t,p){
@@ -368,5 +447,5 @@ function playerProfileModal(t,p){
  const all=[...(t.matches||[]),...allKOmatches(t),...(t.ko?.thirdPlace?[t.ko.thirdPlace]:[])].filter(m=>m.a===p||m.b===p);
  return `<div class="modal-backdrop" onclick="closeProfile()"><div class="profile-modal" onclick="event.stopPropagation()"><div class="row between"><div><span class="pill">SPIELERPROFIL</span><h2>${esc(p)}</h2></div><button class="secondary small" onclick="closeProfile()">Schließen</button></div><div class="profile-stats"><div><b>${stats.matches}</b><small>Spiele</small></div><div><b>${stats.won}</b><small>Legs gewonnen</small></div><div><b>${stats.lost}</b><small>Legs verloren</small></div><div><b>${stats.pct}%</b><small>Leg-Winrate</small></div>${t.useAverage?`<div><b>${stats.average!=null?stats.average.toFixed(2):"—"}</b><small>Ø Average</small></div>`:""}</div><div class="card profile-history"><h3>Spiele</h3>${all.length?all.map(m=>{const other=m.a===p?m.b:m.a,me=m.a===p?m.sa:m.sb,opp=m.a===p?m.sb:m.sa;return `<div class="history-row"><span>${playerButton(other||"Noch offen")}</span><b>${me!=null?`${me}:${opp}`:"offen"}</b>${t.useAverage?`<small>${m.a===p?(m.avgA!=null?Number(m.avgA).toFixed(2):"—"):(m.avgB!=null?Number(m.avgB).toFixed(2):"—")}</small>`:""}</div>`}).join(""):"<p class='muted'>Noch keine Spiele.</p>"}</div></div></div>`;
 }
-window.nav=nav;window.addPlayer=()=>{};window.openProfile=openProfile;window.closeProfile=closeProfile;window.drawPlayers=drawPlayers;window.toggleFormat=toggleFormat;window.toggleSpecialModes=toggleSpecialModes;window.syncPlayerFields=syncPlayerFields;window.createTournament=createTournament;window.openT=openT;window.delT=delT;window.saveMatch=saveMatch;window.startKO=startKO;window.saveKO=saveKO;window.saveThirdPlace=saveThirdPlace;window.updateThirdPlaceOption=updateThirdPlaceOption;
+window.nav=nav;window.addPlayer=()=>{};window.openProfile=openProfile;window.closeProfile=closeProfile;window.drawPlayers=drawPlayers;window.toggleFormat=toggleFormat;window.toggleSpecialModes=toggleSpecialModes;window.syncPlayerFields=syncPlayerFields;window.createTournament=createTournament;window.openT=openT;window.delT=delT;window.saveMatch=saveMatch;window.startKO=startKO;window.saveKO=saveKO;window.saveThirdPlace=saveThirdPlace;window.updateThirdPlaceOption=updateThirdPlaceOption;window.generateTournamentImage=generateTournamentImage;window.closeExportPreview=closeExportPreview;window.downloadTournamentImage=downloadTournamentImage;window.shareTournamentImage=shareTournamentImage;
 render();
