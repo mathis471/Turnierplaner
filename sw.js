@@ -1,5 +1,5 @@
-const CACHE="dart-turnier-v4";
-const ASSETS=["./","./index.html","./style.css","./app.js","./manifest.json"];
+const CACHE="dart-turnier-v5-modern-bg";
+const ASSETS=["./","./index.html","./style.css","./app.js","./manifest.json","./dart-background.jpg"];
 self.addEventListener("install",event=>{
  event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)).then(()=>self.skipWaiting()));
 });

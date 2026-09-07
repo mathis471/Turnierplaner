@@ -17,7 +17,13 @@ function nav(view){state.view=view;save();render()}
 function current(){return state.tournaments.find(t=>t.id===state.current)}
 function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
 function modes(selected=3){return [1,3,5,7,9,11,13,15,17,19].map(n=>`<option value="${n}" ${n===selected?"selected":""}>Best of ${n}</option>`).join("")}
-function header(back=true){return `<div class="top"><div class="brand">🎯 Dart Turnier</div>${back?'<button class="secondary small" onclick="nav(\'home\')">Startseite</button>':''}</div>`}
+function header(back=true){return `<div class="top"><div class="brand">🎯 Dart Turnier</div><div class="top-actions">${back?'<button class="secondary small" onclick="nav(\'home\')">Startseite</button>':''}</div></div>`}
+
+function applyBackground(){
+ const bg=$("#bgLayer");
+ if(!bg)return;
+ bg.style.backgroundImage='url("dart-background.jpg")';
+}
 
 function render(){
  const app=$("#app");
@@ -25,6 +31,7 @@ function render(){
  else if(state.view==="new")app.innerHTML=newTournament();
  else app.innerHTML=tournament();
  if(state.view==="new")drawPlayers();
+ applyBackground();
  if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
 }
 
