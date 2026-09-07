@@ -1,22 +1,21 @@
-Dart Turnier – Vercel / GitHub Pages
+Dart Turnier – Vercel/GitHub Pages ready
 
-Diese Version ist eine statische Web-App und kann direkt über Vercel oder GitHub Pages veröffentlicht werden.
+Enthalten:
+- index.html
+- style.css
+- app.js
+- manifest.json
+- sw.js
+- vercel.json
 
-Neu in dieser Version:
-- Hintergrund-Auswahl mit 3 Varianten: Schlicht, Dartscheibe, Dart-Details
-- Auswahl wird lokal auf dem Gerät gespeichert und bleibt beim nächsten Öffnen erhalten
-- Hintergrund passt sich an iPhone/PWA-Statusleiste an
-- Vercel-Konfiguration vorhanden
-- PWA/Service-Worker-Cache aktualisiert
-- KO-Freilose robuster verarbeitet
+Neu:
+- Hintergrundauswahl (Schlicht, Dartscheibe, Dart-Details)
+- robustere lokale Speicherung/PWA
+- verbesserte KO-Logik mit Freilosen
+- KO-Setzung funktioniert auch bei ungerader Anzahl von Gruppen und Qualifizierten
+- vollständiger KO-Baum wird vorab angelegt
 
-Vercel:
-1. Projekt hochladen/mit GitHub verbinden.
-2. Framework Preset: Other bzw. keine Framework-Erkennung nötig.
-3. Build Command leer lassen.
-4. Output Directory: . (Projektwurzel).
-
-GitHub Pages:
-1. Dateien in ein Repository hochladen.
-2. Settings > Pages öffnen.
-3. Deploy from a branch auswählen und den gewünschten Branch/Root wählen.
+Deployment:
+1. Dateien ins GitHub-Repository laden.
+2. Für GitHub Pages: Settings -> Pages -> Deploy from branch.
+3. Für Vercel: Repository importieren; Framework Preset auf Other/kein Framework bzw. Static Site lassen.

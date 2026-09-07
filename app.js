@@ -2,11 +2,10 @@ const KEY="dart-turnier-data-v2";
 const $=s=>document.querySelector(s);
 let state;
 try {
- state=JSON.parse(localStorage.getItem(KEY)||'null')||{tournaments:[],current:null,view:"home",tab:"overview",theme:"simple"};
+ state=JSON.parse(localStorage.getItem(KEY)||'null')||{tournaments:[],current:null,view:"home",tab:"overview"};
 } catch(e) {
- state={tournaments:[],current:null,view:"home",tab:"overview",theme:"simple"};
+ state={tournaments:[],current:null,view:"home",tab:"overview"};
 }
-state.theme=state.theme||"simple";
 let draftPlayers=[];
 
 function save(){
@@ -16,38 +15,11 @@ function save(){
 function uid(){return Math.random().toString(36).slice(2,9)}
 function nav(view){state.view=view;save();render()}
 function current(){return state.tournaments.find(t=>t.id===state.current)}
-function applyTheme(){
- document.body.classList.remove("theme-simple","theme-dartboard","theme-darts");
- document.body.classList.add("theme-"+(state.theme||"simple"));
- const meta=document.querySelector('meta[name="theme-color"]');
- if(meta)meta.setAttribute("content",state.theme==="simple"?"#111827":"#07101b");
-}
-function setTheme(theme){
- if(!["simple","dartboard","darts"].includes(theme))return;
- state.theme=theme;save();applyTheme();render();
-}
-function openThemePicker(){
- const el=document.createElement("div");
- el.className="theme-modal";
- el.id="theme-modal";
- el.innerHTML=themePickerHTML();
- document.body.appendChild(el);
-}
-function closeThemePicker(){const el=document.getElementById("theme-modal");if(el)el.remove()}
-function themePickerHTML(){
- const opt=(id,label,cls,icon)=>`<button class="theme-option ${state.theme===id?"active":""}" onclick="setTheme('${id}');closeThemePicker()">
-   <span class="theme-thumb ${cls}"><span class="theme-check">✓</span></span><span class="theme-label">${icon} ${label}</span></button>`;
- return `<div class="theme-sheet" onclick="event.stopPropagation()">
-  <div class="picker-head"><div><h3>Hintergrund auswählen</h3><div class="muted">Wähle den Hintergrund, der dir am besten gefällt.</div></div><button class="theme-sheet-close" onclick="closeThemePicker()">×</button></div>
-  <div class="theme-options">${opt("simple","Schlicht","simple","◉")}${opt("dartboard","Dartscheibe","board","🎯")}${opt("darts","Dart-Details","darts","➤")}</div>
- </div>`;
-}
 function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
 function modes(selected=3){return [1,3,5,7,9,11,13,15,17,19].map(n=>`<option value="${n}" ${n===selected?"selected":""}>Best of ${n}</option>`).join("")}
 function header(back=true){return `<div class="top"><div class="brand">🎯 Dart Turnier</div>${back?'<button class="secondary small" onclick="nav(\'home\')">Startseite</button>':''}</div>`}
 
 function render(){
- applyTheme();
  const app=$("#app");
  if(state.view==="home")app.innerHTML=home();
  else if(state.view==="new")app.innerHTML=newTournament();
@@ -68,7 +40,6 @@ function home(){
  <div class="row"><button class="primary small" onclick="openT('${t.id}')">Öffnen</button>
  <button class="danger small" onclick="delT('${t.id}')">Löschen</button></div></div>`).join("")}</div>`
  :`<div class="card"><p class="muted">Noch kein Turnier angelegt.</p></div>`}</div>
- <button class="background-button" onclick="openThemePicker()"><span>🎨 &nbsp; Hintergrund auswählen</span><span>›</span></button>
  <div class="footer">Die Turnierdaten werden nur auf diesem Gerät gespeichert.</div></div>`;
 }
 
@@ -141,46 +112,77 @@ function buildGroups(t,gcount){
 }
 function roundName(n){return n===2?"Finale":n===4?"Halbfinale":n===8?"Viertelfinale":n===16?"Achtelfinale":`Runde (${n})`}
 function modeForRound(t,n){const name=roundName(n);if(name==="Halbfinale")return t.semiMode;if(name==="Finale")return t.finalMode;return t.baseMode}
-function makeRound(teams,mode,name){let r=[];for(let i=0;i<teams.length;i+=2)r.push({id:uid(),a:teams[i]||null,b:teams[i+1]||null,sa:null,sb:null,mode});return {id:uid(),name,matches:r}}
-function buildKO(t){
- let count=1;while(count<t.players.length)count*=2;
- const teams=[...t.players];while(teams.length<count)teams.push(null);
- const first=makeRound(teams,t.baseMode,roundName(count));
- t.ko.rounds=[first];
- // Freilose automatisch weitergeben. So blockieren ungerade Teilnehmerzahlen
- // (z.B. 5, 7, 9, ...) den KO-Baum nicht.
- let winners=[];
- first.matches.forEach(m=>{
-  if(m.a && !m.b){m.sa=Math.ceil(m.mode/2);m.sb=0;winners.push(m.a);}
-  else if(!m.a && m.b){m.sa=0;m.sb=Math.ceil(m.mode/2);winners.push(m.b);}
-  else if(m.a && m.b) winners.push(null);
- });
- if(winners.some(Boolean)) advanceByes(t,0);
+function makeRound(teams,mode,name){
+ let r=[];
+ for(let i=0;i<teams.length;i+=2)r.push({id:uid(),a:teams[i]||null,b:teams[i+1]||null,sa:null,sb:null,mode});
+ return {id:uid(),name,matches:r};
 }
-function advanceByes(t,ri){
+function winnerOf(m){
+ if(m.sa==null)return null;
+ if(m.a&&m.b)return m.sa>m.sb?m.a:m.b;
+ return m.a||m.b||null;
+}
+function prepareFirstRound(r){
+ r.matches.forEach(m=>{
+  if(m.a&&m.b)return;
+  // Einseitige Paarung = Freilos. Zwei leere Plätze sind ein leerer
+  // Bracket-Slot und werden ebenfalls als abgeschlossen markiert.
+  if(m.a||m.b){m.sa=m.a?Math.ceil(m.mode/2):0;m.sb=m.b?Math.ceil(m.mode/2):0;}
+  else {m.sa=0;m.sb=0;m.bye=true;}
+ });
+}
+function createKORounds(t,count,teams){
+ t.ko.rounds=[];
+ const firstTeams=[...teams];
+ while(firstTeams.length<count)firstTeams.push(null);
+ t.ko.rounds.push(makeRound(firstTeams,t.baseMode,roundName(count)));
+ for(let size=count/2;size>=2;size/=2)
+  t.ko.rounds.push(makeRound(Array(size).fill(null),modeForRound(t,size),roundName(size)));
+ prepareFirstRound(t.ko.rounds[0]);
+ propagateKO(t,0);
+}
+function propagateKO(t,ri){
  const r=t.ko.rounds[ri];
- const winners=r.matches.map(m=>m.sa!=null?(m.sa>m.sb?m.a:m.b):null);
- if(r.matches.length===1 && winners[0]){t.ko.champion=winners[0];return;}
- const active=winners.filter(Boolean);
- if(!active.length)return;
- const nextCount=Math.ceil(active.length/2);
- const size=1; // winners are inserted in bracket order below
+ if(!r)return;
  if(ri+1>=t.ko.rounds.length){
-  let target=1;while(target<active.length)target*=2;
-  t.ko.rounds.push(makeRound(active.concat(Array(Math.max(0,target-active.length)).fill(null)),modeForRound(t,target),roundName(target)));
+  if(r.matches.length===1&&r.matches[0].sa!=null&&winnerOf(r.matches[0]))
+   t.ko.champion=winnerOf(r.matches[0]);
+  return;
  }
- // Any single-sided match is a bye and can be propagated repeatedly.
  const next=t.ko.rounds[ri+1];
  let changed=false;
+ for(let i=0;i<r.matches.length;i++){
+  const m=r.matches[i];
+  if(m.sa==null)continue;
+  const w=winnerOf(m);
+  const slot=Math.floor(i/2),side=i%2?"b":"a";
+  if(w && !next.matches[slot][side]){next.matches[slot][side]=w;changed=true;}
+ }
+ // Ein Match der nächsten Runde ist erst dann automatisch ein Freilos,
+ // wenn BEIDE Zubringer abgeschlossen sind. Dadurch funktionieren auch
+ // 3, 5, 6, 7, 9 ... Teilnehmer/Qualifizierte korrekt.
  for(let i=0;i<next.matches.length;i++){
   const m=next.matches[i];
-  const left=winners[i*2]||null,right=winners[i*2+1]||null;
-  if(left && !m.a){m.a=left;changed=true}
-  if(right && !m.b){m.b=right;changed=true}
-  if(m.a && !m.b && m.sa==null){m.sa=Math.ceil(m.mode/2);m.sb=0;changed=true;}
-  else if(!m.a && m.b && m.sa==null){m.sa=0;m.sb=Math.ceil(m.mode/2);changed=true;}
+  if(m.sa!=null)continue;
+  const left=r.matches[i*2],right=r.matches[i*2+1];
+  if(!left||!right||left.sa==null||right.sa==null)continue;
+  const lw=winnerOf(left),rw=winnerOf(right);
+  if(lw&&rw)continue;
+  if(lw||rw){
+   m.a=lw||null;m.b=rw||null;
+   m.sa=lw?Math.ceil(m.mode/2):0;
+   m.sb=rw?Math.ceil(m.mode/2):0;
+   changed=true;
+  }else{
+   m.a=null;m.b=null;m.sa=0;m.sb=0;m.bye=true;
+   changed=true;
+  }
  }
- if(changed) advanceByes(t,ri+1);
+ if(changed)propagateKO(t,ri+1);
+}
+function buildKO(t){
+ let count=1;while(count<t.players.length)count*=2;
+ createKORounds(t,count,[...t.players]);
 }
 function openT(id){state.current=id;state.view="tournament";state.tab="overview";save();render()}
 function delT(id){if(confirm("Turnier wirklich löschen?")){state.tournaments=state.tournaments.filter(t=>t.id!==id);if(state.current===id)state.current=null;save();render()}}
@@ -196,17 +198,36 @@ function tournament(){
  ${tab==="overview"?overview(t):tab==="groups"?groups(t):tab==="matches"?matches(t):tab==="table"?tables(t):koView(t)}
  </div></div>`;
 }
+function allKOmatches(t){
+ return (t.ko?.rounds||[]).flatMap(r=>r.matches||[]);
+}
+function playerStats(t){
+ const stats=Object.fromEntries(t.players.map(p=>[p,{p,legs:0,won:0,lost:0,matches:0}]));
+ const all=[...(t.matches||[]),...allKOmatches(t)];
+ all.filter(m=>m.sa!=null&&m.sb!=null&&m.a&&m.b).forEach(m=>{
+  const A=stats[m.a],B=stats[m.b]; if(!A||!B)return;
+  A.legs+=m.sa+m.sb; B.legs+=m.sa+m.sb;
+  A.won+=m.sa; A.lost+=m.sb; B.won+=m.sb; B.lost+=m.sa;
+  A.matches++; B.matches++;
+ });
+ return Object.values(stats).map(x=>({...x,pct:x.legs?Math.round(x.won/x.legs*100):0})).sort((a,b)=>(b.pct-a.pct)||(b.won-a.won)||(b.legs-a.legs)||a.p.localeCompare(b.p));
+}
 function overview(t){
- const total=t.matches.length,done=t.matches.filter(m=>m.sa!=null).length;
+ const groupTotal=t.matches.length,groupDone=t.matches.filter(m=>m.sa!=null).length;
+ const stats=playerStats(t);
+ const groupFinished=t.format!=="groups"||groupDone===groupTotal;
  return `<div class="grid">
- <div class="card"><h3>Gruppenfortschritt</h3><div style="font-size:34px;font-weight:900">${done}/${total}</div><p class="muted">Gruppenspiele abgeschlossen</p></div>
+ <div class="card"><h3>Gruppenfortschritt</h3><div style="font-size:34px;font-weight:900">${groupDone}/${groupTotal}</div><p class="muted">${t.format==="groups"?"Gruppenspiele abgeschlossen":"Keine Gruppenphase"}</p></div>
  <div class="card"><h3>Spieler</h3><div style="font-size:34px;font-weight:900">${t.players.length}</div><p class="muted">${t.groups.length?t.groups.length+" Gruppen":"Direktes KO"}</p></div>
  <div class="card"><h3>Grundmodus</h3><div style="font-size:25px;font-weight:900">Best of ${t.baseMode}</div><p class="muted">Gruppen & übrige KO-Runden</p></div>
  <div class="card"><h3>Finalrunden</h3><p><b>Halbfinale:</b> Best of ${t.semiMode}<br><b>Finale:</b> Best of ${t.finalMode}</p></div>
  </div>
- ${t.format==="groups"&&done===total&&!t.ko.rounds.length?`<div class="card section success"><h3>Gruppenphase abgeschlossen</h3><p>Die Tabellen sind bereit. Die KO-Phase kann jetzt erstellt werden.</p><button class="primary" onclick="startKO()">KO-Phase erstellen</button></div>`:""}
+ ${groupFinished&&t.format==="groups"&&!t.ko.rounds.length?`<div class="card section success"><h3>KO-Phase wurde automatisch erstellt</h3><p>Die qualifizierten Spieler und alle möglichen KO-Spiele wurden direkt angelegt.</p><button class="primary" onclick="state.tab='ko';render()">KO-Baum anzeigen</button></div>`:""}
  ${t.ko.champion?`<div class="champion"><div class="pill">🏆 TURNIERSIEGER</div><h2>${esc(t.ko.champion)}</h2></div>`:""}
- <div class="card section"><h3>Spieler</h3><div class="players">${t.players.map(p=>`<div class="player">${esc(p)}</div>`).join("")}</div></div>`;
+ <div class="card section"><div class="between row"><div><h3>Spielerübersicht</h3><p class="muted">Alle gespielten Legs aus Gruppen- und KO-Phase.</p></div></div><div class="tablewrap"><table class="overview-table">
+ <tr><th>#</th><th>Spieler</th><th>Spiele</th><th>Legs ges.</th><th>Gewonnen</th><th>Verloren</th><th>Gewonnen %</th></tr>
+ ${stats.map((x,i)=>`<tr><td>${i+1}</td><td><b>${esc(x.p)}</b></td><td>${x.matches}</td><td>${x.legs}</td><td>${x.won}</td><td>${x.lost}</td><td><div class="percent-cell"><div class="percent-bar"><span style="width:${x.pct}%"></span></div><b>${x.pct}%</b></div></td></tr>`).join("")}
+ </table></div></div>`;
 }
 function groups(t){return `<div class="grid">${t.groups.map(g=>`<div class="group"><div class="grouphead">${esc(g.name)} <span class="muted">· ${g.players.length} Spieler</span></div><div style="padding:12px">${g.players.map(p=>`<div class="player" style="margin:6px 0">${esc(p)}</div>`).join("")}</div></div>`).join("")}</div>`}
 function matches(t){
@@ -226,7 +247,11 @@ function saveMatch(id){
  const t=current(),m=t.matches.find(x=>x.id===id),a=+$("#sa-"+id).value,b=+$("#sb-"+id).value,need=Math.ceil(m.mode/2);
  if(!Number.isInteger(a)||!Number.isInteger(b)||a<0||b<0)return alert("Bitte beide Ergebnisse eingeben.");
  if(a===b||((a!==need)&&(b!==need))||Math.max(a,b)>need)return alert(`Ungültiges Ergebnis. Bei Best of ${m.mode} muss ein Spieler ${need} Legs gewinnen.`);
- m.sa=a;m.sb=b;save();render();
+ m.sa=a;m.sb=b;
+ if(t.format==="groups" && !t.ko.rounds.length && t.matches.every(x=>x.sa!=null)) {
+   createKOFromGroups(t);
+ }
+ save();render();
 }
 function standings(t,g){
  const s=g.players.map(p=>({p,w:0,l:0,wl:0,ll:0,pts:0}));
@@ -243,33 +268,23 @@ function tables(t){
  ${s.map((x,i)=>`<tr><td>${i+1}</td><td><b>${esc(x.p)}</b></td><td>${x.w+x.l}</td><td>${x.w}</td><td>${x.l}</td><td>${x.wl}:${x.ll}</td><td><b>${x.pts}</b></td></tr>`).join("")}
  </table></div></div>`}).join("")}</div>`;
 }
-function startKO(){
- const t=current();if(t.ko.rounds.length)return alert("Die KO-Phase wurde bereits erstellt.");
+function createKOFromGroups(t){
  let teams=[];
- t.groups.forEach(g=>{
-  const s=standings(t,g);
-  for(let i=0;i<t.q;i++)if(s[i])teams.push(s[i].p);
- });
- if(teams.length<2)return alert("Es sind noch nicht genügend qualifizierte Spieler vorhanden.");
- let count=1;while(count<teams.length)count*=2;while(teams.length<count)teams.push(null);
- // einfache faire Setzung: Gruppe A1-B2, B1-A2, C1-D2, D1-C2 ...
- if(t.q===2 && t.groups.length*2===teams.length){
-  const seeded=[];
-  for(let i=0;i<t.groups.length;i+=2){
-   const A=standings(t,t.groups[i]),B=t.groups[i+1]?standings(t,t.groups[i+1]):[];
-   if(A[0]&&B[1]){seeded.push(A[0].p,B[1].p)}
-   if(B[0]&&A[1]){seeded.push(B[0].p,A[1].p)}
-  }
-  teams=seeded;while(teams.length<count)teams.push(null);
+ for(let rank=0;rank<t.q;rank++){
+  const ranked=t.groups.map(g=>standings(t,g)[rank]).filter(Boolean);
+  if(rank%2===1)ranked.reverse();
+  teams.push(...ranked.map(x=>x.p));
  }
- t.ko.rounds=[makeRound(teams,modeForRound(t,count),roundName(count))];
- // Freilose sofort abschließen und an die nächste Runde weiterreichen.
- const first=t.ko.rounds[0];
- first.matches.forEach(m=>{
-  if(m.a&&!m.b){m.sa=Math.ceil(m.mode/2);m.sb=0;}
-  else if(!m.a&&m.b){m.sa=0;m.sb=Math.ceil(m.mode/2);}
- });
- advanceByes(t,0);
+ if(teams.length<2)return false;
+ let count=1;while(count<teams.length)count*=2;
+ createKORounds(t,count,teams);
+ return true;
+}
+function startKO(){
+ const t=current();
+ if(t.ko.rounds.length)return alert("Die KO-Phase wurde bereits erstellt.");
+ if(t.format==="groups" && !t.matches.every(m=>m.sa!=null))return alert("Die Gruppenphase ist noch nicht abgeschlossen.");
+ if(!createKOFromGroups(t))return alert("Es sind noch nicht genügend qualifizierte Spieler vorhanden.");
  save();state.tab="ko";render();
 }
 function koView(t){
@@ -289,29 +304,8 @@ function saveKO(ri,mi){
  if(!Number.isInteger(a)||!Number.isInteger(b)||a<0||b<0||a===b||((a!==need)&&(b!==need))||Math.max(a,b)>need)
   return alert(`Ungültiges Ergebnis. Bei Best of ${m.mode} muss ein Spieler ${need} Legs gewinnen.`);
  m.sa=a;m.sb=b;
- const winner=a>b?m.a:m.b;
- const nextIndex=ri+1;
- if(nextIndex>=t.ko.rounds.length){
-  if(r.matches.length===1){t.ko.champion=winner;}
-  else {
-   const winners=r.matches.map(x=>x.sa!=null?(x.sa>x.sb?x.a:x.b):null).filter(Boolean);
-   let count=1;while(count<winners.length)count*=2;
-   t.ko.rounds.push(makeRound(winners.concat(Array(count-winners.length).fill(null)),modeForRound(t,count),roundName(count)));
-   advanceByes(t,nextIndex);
-  }
- }else{
-  const next=t.ko.rounds[nextIndex];
-  // Ergebnis in der korrekten Position der nächsten Runde.
-  const slot=Math.floor(mi/2), side=mi%2?"b":"a";
-  next.matches[slot][side]=winner;
-  // Sobald alle Paarungen der Runde feststehen, Freilose automatisch abwickeln.
-  next.matches.forEach(x=>{
-   if(x.a&&!x.b&&x.sa==null){x.sa=Math.ceil(x.mode/2);x.sb=0;}
-   else if(!x.a&&x.b&&x.sa==null){x.sa=0;x.sb=Math.ceil(x.mode/2);}
-  });
-  advanceByes(t,nextIndex);
- }
+ propagateKO(t,ri);
  save();render();
 }
-window.nav=nav;window.applyTheme=applyTheme;window.setTheme=setTheme;window.openThemePicker=openThemePicker;window.closeThemePicker=closeThemePicker;window.addPlayer=()=>{};window.drawPlayers=drawPlayers;window.toggleFormat=toggleFormat;window.toggleSpecialModes=toggleSpecialModes;window.syncPlayerFields=syncPlayerFields;window.createTournament=createTournament;window.openT=openT;window.delT=delT;window.saveMatch=saveMatch;window.startKO=startKO;window.saveKO=saveKO;
+window.nav=nav;window.addPlayer=()=>{};window.drawPlayers=drawPlayers;window.toggleFormat=toggleFormat;window.toggleSpecialModes=toggleSpecialModes;window.syncPlayerFields=syncPlayerFields;window.createTournament=createTournament;window.openT=openT;window.delT=delT;window.saveMatch=saveMatch;window.startKO=startKO;window.saveKO=saveKO;
 render();
