@@ -227,10 +227,7 @@ function playerStats(t){
  });
  return Object.values(stats).map(x=>({...x,pct:x.legs?Math.round(x.won/x.legs*100):0,average:x.avgs.length?x.avgs.reduce((a,b)=>a+b,0)/x.avgs.length:null})).sort((a,b)=>(b.pct-a.pct)||(b.won-a.won)||(b.legs-a.legs)||a.p.localeCompare(b.p));
 }
-function playerButton(name){
- const safe=JSON.stringify(String(name)).replace(/</g,"\u003c").replace(/'/g,"&#39;");
- return `<button type="button" class="player-link" onclick='openProfile(${safe})'>${esc(name)}</button>`;
-}
+function playerButton(name){return `<button class="player-link" onclick="openProfile(${JSON.stringify(name).replace(/</g,'\\u003c')})">${esc(name)}</button>`}
 function overview(t){
  const groupTotal=t.matches.length,groupDone=t.matches.filter(m=>m.sa!=null).length,stats=playerStats(t),groupFinished=t.format!=="groups"||groupDone===groupTotal;
  const places=placementSummary(t);
@@ -264,7 +261,7 @@ function saveMatch(id){
  const t=current(),m=t.matches.find(x=>x.id===id),a=+$("#sa-"+id).value,b=+$("#sb-"+id).value,need=Math.ceil(m.mode/2);
  if(!Number.isInteger(a)||!Number.isInteger(b)||a<0||b<0)return alert("Bitte beide Ergebnisse eingeben.");
  if(a===b||((a!==need)&&(b!==need))||Math.max(a,b)>need)return alert(`Ungültiges Ergebnis. Bei Best of ${m.mode} muss ein Spieler ${need} Legs gewinnen.`);
- if(t.useAverage){const va=$("#avga-"+id)?.value.trim(),vb=$("#avgb-"+id)?.value.trim(),aa=Number(va),bb=Number(vb);if(!va||!vb||!Number.isFinite(aa)||!Number.isFinite(bb)||aa<=0||bb<=0||aa>200||bb>200)return alert("Bitte beide Averages eingeben.");m.avgA=aa;m.avgB=bb;}
+ if(t.useAverage){const aa=+$("#avga-"+id).value,bb=+$("#avgb-"+id).value;if(!Number.isFinite(aa)||!Number.isFinite(bb)||aa<0||bb<0)return alert("Bitte beide Averages eingeben.");m.avgA=aa;m.avgB=bb;}
  m.sa=a;m.sb=b;
  if(t.format==="groups" && !t.ko.rounds.length && t.matches.every(x=>x.sa!=null))createKOFromGroups(t);
  save();render();
@@ -307,44 +304,33 @@ function startKO(){
  if(!createKOFromGroups(t))return alert("Es sind noch nicht genügend qualifizierte Spieler vorhanden.");
  save();state.tab="ko";render();
 }
-function loserOf(m){
- if(m.sa==null||m.sb==null||!m.a||!m.b)return null;
- return m.sa<m.sb?m.a:m.b;
-}
 function syncThirdPlace(t){
  if(!t.thirdPlace || !t.ko?.rounds?.length) return;
  const semi=t.ko.rounds.find(r=>r.name==="Halbfinale");
- if(!semi || semi.matches.length!==2) return;
- const a=loserOf(semi.matches[0]), b=loserOf(semi.matches[1]);
+ if(!semi || semi.matches.length<2 || semi.matches.some(m=>m.sa==null)) return;
+ const a=winnerOf({sa:semi.matches[0].sb,sb:semi.matches[0].sa,a:semi.matches[0].b,b:semi.matches[0].a});
+ const b=winnerOf({sa:semi.matches[1].sb,sb:semi.matches[1].sa,a:semi.matches[1].b,b:semi.matches[1].a});
  if(!a || !b) return;
  const mode=t.semiMode;
- const same=t.ko.thirdPlace && t.ko.thirdPlace.a===a && t.ko.thirdPlace.b===b;
- if(!same){
-   t.ko.thirdPlace={id:uid(),name:"Spiel um Platz 3",a,b,sa:null,sb:null,avgA:null,avgB:null,mode};
+ if(!t.ko.thirdPlace || t.ko.thirdPlace.a!==a || t.ko.thirdPlace.b!==b){
+   t.ko.thirdPlace={id:uid(),name:"Spiel um Platz 3",a,b,sa:null,sb:null,mode};
  }
 }
 function thirdPlaceHTML(t){
  const m=t.ko.thirdPlace; if(!m)return "";
  const finished=m.sa!=null,winner=finished?(m.sa>m.sb?m.a:m.b):null;
- return `<div class="card third-place-card"><div class="between row"><div><h3>🥉 Spiel um Platz 3</h3><p class="muted">Best of ${m.mode} · die beiden Halbfinal-Verlierer</p></div><span class="pill">${finished?"Abgeschlossen":"Offen"}</span></div><div class="third-place-match"><div class="teamline ${winner===m.a?"winner":""}"><span>${winner===m.a?"✓ ":""}${playerButton(m.a)}</span><b>${m.sa??"—"}</b></div><div class="teamline ${winner===m.b?"winner":""}"><span>${winner===m.b?"✓ ":""}${playerButton(m.b)}</span><b>${m.sb??"—"}</b></div>${!finished?`<div class="score third-score"><input id="tpa-${m.id}" type="number" min="0"><b>:</b><input id="tpb-${m.id}" type="number" min="0">${t.useAverage?`<input id="tpavga-${m.id}" class="avg-input" type="number" min="0.01" max="200" step="0.01" placeholder="Avg ${esc(m.a)}"><input id="tpavgb-${m.id}" class="avg-input" type="number" min="0.01" max="200" step="0.01" placeholder="Avg ${esc(m.b)}">`:""}<button class="primary small" onclick="saveThirdPlace()">OK</button></div>`:t.useAverage?`<div class="avg-result">Average: ${m.avgA!=null?Number(m.avgA).toFixed(2):"—"} · ${m.avgB!=null?Number(m.avgB).toFixed(2):"—"}</div>`:""}</div></div>`;
+ return `<div class="card third-place-card"><div class="between row"><div><h3>🥉 Spiel um Platz 3</h3><p class="muted">Best of ${m.mode} · Halbfinal-Verlierer</p></div><span class="pill">${finished?"Abgeschlossen":"Offen"}</span></div><div class="third-place-match"><div class="teamline ${winner===m.a?"winner":""}"><span>${winner===m.a?"✓ ":""}${esc(m.a)}</span><b>${m.sa??"—"}</b></div><div class="teamline ${winner===m.b?"winner":""}"><span>${winner===m.b?"✓ ":""}${esc(m.b)}</span><b>${m.sb??"—"}</b></div>${!finished?`<div class="score"><input id="tpa-${m.id}" type="number" min="0"><b>:</b><input id="tpb-${m.id}" type="number" min="0"><button class="primary small" onclick="saveThirdPlace()">OK</button></div>`:""}</div></div>`;
 }
 function saveThirdPlace(){
  const t=current(),m=t.ko.thirdPlace; if(!m)return;
  const a=+$("#tpa-"+m.id).value,b=+$("#tpb-"+m.id).value,need=Math.ceil(m.mode/2);
  if(!Number.isInteger(a)||!Number.isInteger(b)||a<0||b<0||a===b||((a!==need)&&(b!==need))||Math.max(a,b)>need) return alert(`Ungültiges Ergebnis. Bei Best of ${m.mode} muss ein Spieler ${need} Legs gewinnen.`);
- if(t.useAverage){
-   const va=$("#tpavga-"+m.id)?.value.trim(),vb=$("#tpavgb-"+m.id)?.value.trim();
-   const aa=Number(va),bb=Number(vb);
-   if(!va||!vb||!Number.isFinite(aa)||!Number.isFinite(bb)||aa<=0||bb<=0||aa>200||bb>200)return alert("Bitte beide Averages eingeben.");
-   m.avgA=aa;m.avgB=bb;
- }
  m.sa=a;m.sb=b;save();render();
 }
 function koView(t){
  syncThirdPlace(t);
  if(!t.ko.rounds.length)return `<div class="card"><h3>KO-Phase</h3><p class="muted">Noch nicht erstellt.</p></div>`;
- const firstCount=t.ko.rounds[0]?.matches.length||1;
- return `${thirdPlaceHTML(t)}<div class="ko-board"><div class="bracket" style="--bracket-rows:${firstCount*2};--rounds:${t.ko.rounds.length}">${t.ko.rounds.map((r,ri)=>`<div class="round round-${ri}" style="--round-span:${Math.pow(2,ri)}"><h3>${esc(r.name)} · Best of ${r.matches[0]?.mode||t.baseMode}</h3>${r.matches.map((m,mi)=>`<div class="bracket-match">${koMatchHTML(ri,mi,m)}</div>`).join("")}</div>`).join("")}</div></div>`;
+ return `${thirdPlaceHTML(t)}<div class="bracket">${t.ko.rounds.map((r,ri)=>`<div class="round"><h3>${esc(r.name)} · Best of ${r.matches[0]?.mode||t.baseMode}</h3>${r.matches.map((m,mi)=>koMatchHTML(ri,mi,m)).join("")}</div>`).join("")}</div>`;
 }
 function koMatchHTML(ri,mi,m){
  const t=current(),finished=m.sa!=null,winner=finished?(m.sa>m.sb?m.a:m.b):null;
@@ -358,7 +344,7 @@ function saveKO(ri,mi){
  if(!m.a||!m.b)return alert("Beide Spieler stehen noch nicht fest.");
  const a=+$("#ksa-"+ri+"-"+mi).value,b=+$("#ksb-"+ri+"-"+mi).value,need=Math.ceil(m.mode/2);
  if(!Number.isInteger(a)||!Number.isInteger(b)||a<0||b<0||a===b||((a!==need)&&(b!==need))||Math.max(a,b)>need)return alert(`Ungültiges Ergebnis. Bei Best of ${m.mode} muss ein Spieler ${need} Legs gewinnen.`);
- if(t.useAverage){const va=$("#kavga-"+ri+"-"+mi)?.value.trim(),vb=$("#kavgb-"+ri+"-"+mi)?.value.trim(),aa=Number(va),bb=Number(vb);if(!va||!vb||!Number.isFinite(aa)||!Number.isFinite(bb)||aa<=0||bb<=0||aa>200||bb>200)return alert("Bitte beide Averages eingeben.");m.avgA=aa;m.avgB=bb;}
+ if(t.useAverage){const aa=+$("#kavga-"+ri+"-"+mi).value,bb=+$("#kavgb-"+ri+"-"+mi).value;if(!Number.isFinite(aa)||!Number.isFinite(bb)||aa<0||bb<0)return alert("Bitte beide Averages eingeben.");m.avgA=aa;m.avgB=bb;}
  m.sa=a;m.sb=b;propagateKO(t,ri);syncThirdPlace(t);save();render();
 }
 function openProfile(player){state.profilePlayer=player;save();render()}
