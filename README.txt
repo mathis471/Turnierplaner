@@ -1,19 +1,22 @@
-DART TURNIER V2
+Dart Turnier – Vercel / GitHub Pages
 
-Neue Funktionen:
-- Spieler-Namen direkt beim Erstellen eingeben
-- Spielerfelder passen sich automatisch an die Spieleranzahl an
-- Sieger eines gespeicherten Gruppenspiels wird grün hervorgehoben
-- Halbfinale kann einen eigenen Best-of-Modus bekommen
-- Finale kann einen eigenen Best-of-Modus bekommen
-- Diese Einstellungen werden im Turnier gespeichert
-- PWA/Offline-Grundstruktur mit Service Worker
+Diese Version ist eine statische Web-App und kann direkt über Vercel oder GitHub Pages veröffentlicht werden.
 
-Installation:
-1. Dateien direkt ins Hauptverzeichnis des GitHub-Pages-Repositories hochladen und bestehende Dateien ersetzen.
-2. GitHub Pages muss auf main / root zeigen.
-3. App-Adresse in Safari öffnen.
-4. Bei Bedarf Safari -> Teilen -> Zum Home-Bildschirm.
+Neu in dieser Version:
+- Hintergrund-Auswahl mit 3 Varianten: Schlicht, Dartscheibe, Dart-Details
+- Auswahl wird lokal auf dem Gerät gespeichert und bleibt beim nächsten Öffnen erhalten
+- Hintergrund passt sich an iPhone/PWA-Statusleiste an
+- Vercel-Konfiguration vorhanden
+- PWA/Service-Worker-Cache aktualisiert
+- KO-Freilose robuster verarbeitet
 
-Hinweis:
-Die Turnierdaten werden in localStorage gespeichert. Der Service Worker ermöglicht die Offline-Nutzung nach erfolgreichem ersten Laden.
+Vercel:
+1. Projekt hochladen/mit GitHub verbinden.
+2. Framework Preset: Other bzw. keine Framework-Erkennung nötig.
+3. Build Command leer lassen.
+4. Output Directory: . (Projektwurzel).
+
+GitHub Pages:
+1. Dateien in ein Repository hochladen.
+2. Settings > Pages öffnen.
+3. Deploy from a branch auswählen und den gewünschten Branch/Root wählen.

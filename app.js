@@ -1,17 +1,53 @@
 const KEY="dart-turnier-data-v2";
 const $=s=>document.querySelector(s);
-let state=JSON.parse(localStorage.getItem(KEY)||'{"tournaments":[],"current":null,"view":"home","tab":"overview"}');
+let state;
+try {
+ state=JSON.parse(localStorage.getItem(KEY)||'null')||{tournaments:[],current:null,view:"home",tab:"overview",theme:"simple"};
+} catch(e) {
+ state={tournaments:[],current:null,view:"home",tab:"overview",theme:"simple"};
+}
+state.theme=state.theme||"simple";
 let draftPlayers=[];
 
-function save(){localStorage.setItem(KEY,JSON.stringify(state))}
+function save(){
+ try{localStorage.setItem(KEY,JSON.stringify(state));}
+ catch(e){console.warn("Speichern fehlgeschlagen:",e);}
+}
 function uid(){return Math.random().toString(36).slice(2,9)}
 function nav(view){state.view=view;save();render()}
 function current(){return state.tournaments.find(t=>t.id===state.current)}
+function applyTheme(){
+ document.body.classList.remove("theme-simple","theme-dartboard","theme-darts");
+ document.body.classList.add("theme-"+(state.theme||"simple"));
+ const meta=document.querySelector('meta[name="theme-color"]');
+ if(meta)meta.setAttribute("content",state.theme==="simple"?"#111827":"#07101b");
+}
+function setTheme(theme){
+ if(!["simple","dartboard","darts"].includes(theme))return;
+ state.theme=theme;save();applyTheme();render();
+}
+function openThemePicker(){
+ const el=document.createElement("div");
+ el.className="theme-modal";
+ el.id="theme-modal";
+ el.innerHTML=themePickerHTML();
+ document.body.appendChild(el);
+}
+function closeThemePicker(){const el=document.getElementById("theme-modal");if(el)el.remove()}
+function themePickerHTML(){
+ const opt=(id,label,cls,icon)=>`<button class="theme-option ${state.theme===id?"active":""}" onclick="setTheme('${id}');closeThemePicker()">
+   <span class="theme-thumb ${cls}"><span class="theme-check">✓</span></span><span class="theme-label">${icon} ${label}</span></button>`;
+ return `<div class="theme-sheet" onclick="event.stopPropagation()">
+  <div class="picker-head"><div><h3>Hintergrund auswählen</h3><div class="muted">Wähle den Hintergrund, der dir am besten gefällt.</div></div><button class="theme-sheet-close" onclick="closeThemePicker()">×</button></div>
+  <div class="theme-options">${opt("simple","Schlicht","simple","◉")}${opt("dartboard","Dartscheibe","board","🎯")}${opt("darts","Dart-Details","darts","➤")}</div>
+ </div>`;
+}
 function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
 function modes(selected=3){return [1,3,5,7,9,11,13,15,17,19].map(n=>`<option value="${n}" ${n===selected?"selected":""}>Best of ${n}</option>`).join("")}
 function header(back=true){return `<div class="top"><div class="brand">🎯 Dart Turnier</div>${back?'<button class="secondary small" onclick="nav(\'home\')">Startseite</button>':''}</div>`}
 
 function render(){
+ applyTheme();
  const app=$("#app");
  if(state.view==="home")app.innerHTML=home();
  else if(state.view==="new")app.innerHTML=newTournament();
@@ -32,6 +68,7 @@ function home(){
  <div class="row"><button class="primary small" onclick="openT('${t.id}')">Öffnen</button>
  <button class="danger small" onclick="delT('${t.id}')">Löschen</button></div></div>`).join("")}</div>`
  :`<div class="card"><p class="muted">Noch kein Turnier angelegt.</p></div>`}</div>
+ <button class="background-button" onclick="openThemePicker()"><span>🎨 &nbsp; Hintergrund auswählen</span><span>›</span></button>
  <div class="footer">Die Turnierdaten werden nur auf diesem Gerät gespeichert.</div></div>`;
 }
 
@@ -108,7 +145,42 @@ function makeRound(teams,mode,name){let r=[];for(let i=0;i<teams.length;i+=2)r.p
 function buildKO(t){
  let count=1;while(count<t.players.length)count*=2;
  const teams=[...t.players];while(teams.length<count)teams.push(null);
- t.ko.rounds=[makeRound(teams,t.baseMode,roundName(count))];
+ const first=makeRound(teams,t.baseMode,roundName(count));
+ t.ko.rounds=[first];
+ // Freilose automatisch weitergeben. So blockieren ungerade Teilnehmerzahlen
+ // (z.B. 5, 7, 9, ...) den KO-Baum nicht.
+ let winners=[];
+ first.matches.forEach(m=>{
+  if(m.a && !m.b){m.sa=Math.ceil(m.mode/2);m.sb=0;winners.push(m.a);}
+  else if(!m.a && m.b){m.sa=0;m.sb=Math.ceil(m.mode/2);winners.push(m.b);}
+  else if(m.a && m.b) winners.push(null);
+ });
+ if(winners.some(Boolean)) advanceByes(t,0);
+}
+function advanceByes(t,ri){
+ const r=t.ko.rounds[ri];
+ const winners=r.matches.map(m=>m.sa!=null?(m.sa>m.sb?m.a:m.b):null);
+ if(r.matches.length===1 && winners[0]){t.ko.champion=winners[0];return;}
+ const active=winners.filter(Boolean);
+ if(!active.length)return;
+ const nextCount=Math.ceil(active.length/2);
+ const size=1; // winners are inserted in bracket order below
+ if(ri+1>=t.ko.rounds.length){
+  let target=1;while(target<active.length)target*=2;
+  t.ko.rounds.push(makeRound(active.concat(Array(Math.max(0,target-active.length)).fill(null)),modeForRound(t,target),roundName(target)));
+ }
+ // Any single-sided match is a bye and can be propagated repeatedly.
+ const next=t.ko.rounds[ri+1];
+ let changed=false;
+ for(let i=0;i<next.matches.length;i++){
+  const m=next.matches[i];
+  const left=winners[i*2]||null,right=winners[i*2+1]||null;
+  if(left && !m.a){m.a=left;changed=true}
+  if(right && !m.b){m.b=right;changed=true}
+  if(m.a && !m.b && m.sa==null){m.sa=Math.ceil(m.mode/2);m.sb=0;changed=true;}
+  else if(!m.a && m.b && m.sa==null){m.sa=0;m.sb=Math.ceil(m.mode/2);changed=true;}
+ }
+ if(changed) advanceByes(t,ri+1);
 }
 function openT(id){state.current=id;state.view="tournament";state.tab="overview";save();render()}
 function delT(id){if(confirm("Turnier wirklich löschen?")){state.tournaments=state.tournaments.filter(t=>t.id!==id);if(state.current===id)state.current=null;save();render()}}
@@ -191,6 +263,13 @@ function startKO(){
   teams=seeded;while(teams.length<count)teams.push(null);
  }
  t.ko.rounds=[makeRound(teams,modeForRound(t,count),roundName(count))];
+ // Freilose sofort abschließen und an die nächste Runde weiterreichen.
+ const first=t.ko.rounds[0];
+ first.matches.forEach(m=>{
+  if(m.a&&!m.b){m.sa=Math.ceil(m.mode/2);m.sb=0;}
+  else if(!m.a&&m.b){m.sa=0;m.sb=Math.ceil(m.mode/2);}
+ });
+ advanceByes(t,0);
  save();state.tab="ko";render();
 }
 function koView(t){
@@ -207,30 +286,32 @@ function saveKO(ri,mi){
  const t=current(),r=t.ko.rounds[ri],m=r.matches[mi];
  if(!m.a||!m.b)return alert("Beide Spieler stehen noch nicht fest.");
  const a=+$("#ksa-"+ri+"-"+mi).value,b=+$("#ksb-"+ri+"-"+mi).value,need=Math.ceil(m.mode/2);
- if(!Number.isInteger(a)||!Number.isInteger(b)||a===b||((a!==need)&&(b!==need))||Math.max(a,b)>need)return alert(`Ungültiges Ergebnis. Bei Best of ${m.mode} muss ein Spieler ${need} Legs gewinnen.`);
+ if(!Number.isInteger(a)||!Number.isInteger(b)||a<0||b<0||a===b||((a!==need)&&(b!==need))||Math.max(a,b)>need)
+  return alert(`Ungültiges Ergebnis. Bei Best of ${m.mode} muss ein Spieler ${need} Legs gewinnen.`);
  m.sa=a;m.sb=b;
  const winner=a>b?m.a:m.b;
  const nextIndex=ri+1;
- if(nextIndex<t.ko.rounds.length){
-  t.ko.rounds[nextIndex].matches[Math.floor(mi/2)][mi%2?"b":"a"]=winner;
- } else {
-  if(r.matches.length===1)t.ko.champion=winner;
+ if(nextIndex>=t.ko.rounds.length){
+  if(r.matches.length===1){t.ko.champion=winner;}
   else {
-   const winners=r.matches.map(x=>x.sa>x.sb?x.a:x.b);
-   const nextCount=winners.length;
-   t.ko.rounds.push(makeRound(winners,modeForRound(t,nextCount),roundName(nextCount)));
+   const winners=r.matches.map(x=>x.sa!=null?(x.sa>x.sb?x.a:x.b):null).filter(Boolean);
+   let count=1;while(count<winners.length)count*=2;
+   t.ko.rounds.push(makeRound(winners.concat(Array(count-winners.length).fill(null)),modeForRound(t,count),roundName(count)));
+   advanceByes(t,nextIndex);
   }
- }
- // Wenn die nächste Runde bereits angelegt war, nur nach vollständiger Runde weitermachen.
- if(nextIndex<t.ko.rounds.length){
-  const allDone=r.matches.every(x=>x.sa!=null);
-  if(allDone){
-   const winners=r.matches.map(x=>x.sa>x.sb?x.a:x.b);
-   const next=t.ko.rounds[nextIndex];
-   for(let i=0;i<winners.length;i++)if(i<next.matches.length)next.matches[i/2|0][i%2?"b":"a"]=winners[i];
-  }
+ }else{
+  const next=t.ko.rounds[nextIndex];
+  // Ergebnis in der korrekten Position der nächsten Runde.
+  const slot=Math.floor(mi/2), side=mi%2?"b":"a";
+  next.matches[slot][side]=winner;
+  // Sobald alle Paarungen der Runde feststehen, Freilose automatisch abwickeln.
+  next.matches.forEach(x=>{
+   if(x.a&&!x.b&&x.sa==null){x.sa=Math.ceil(x.mode/2);x.sb=0;}
+   else if(!x.a&&x.b&&x.sa==null){x.sa=0;x.sb=Math.ceil(x.mode/2);}
+  });
+  advanceByes(t,nextIndex);
  }
  save();render();
 }
-window.nav=nav;window.addPlayer=()=>{};window.drawPlayers=drawPlayers;window.toggleFormat=toggleFormat;window.toggleSpecialModes=toggleSpecialModes;window.syncPlayerFields=syncPlayerFields;window.createTournament=createTournament;window.openT=openT;window.delT=delT;window.saveMatch=saveMatch;window.startKO=startKO;window.saveKO=saveKO;
+window.nav=nav;window.applyTheme=applyTheme;window.setTheme=setTheme;window.openThemePicker=openThemePicker;window.closeThemePicker=closeThemePicker;window.addPlayer=()=>{};window.drawPlayers=drawPlayers;window.toggleFormat=toggleFormat;window.toggleSpecialModes=toggleSpecialModes;window.syncPlayerFields=syncPlayerFields;window.createTournament=createTournament;window.openT=openT;window.delT=delT;window.saveMatch=saveMatch;window.startKO=startKO;window.saveKO=saveKO;
 render();

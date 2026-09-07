@@ -7,9 +7,15 @@
 <link rel="manifest" href="manifest.json">
 <title>Dart Turnier</title>
 <link rel="stylesheet" href="style.css">
+<style id="theme-bg-style"></style>
 </head>
 <body>
 <div id="app"></div>
 <script src="app.js"></script>
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(console.warn));
+}
+</script>
 </body>
 </html>

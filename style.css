@@ -30,3 +30,99 @@ th{font-size:12px;color:#6b7280;text-transform:uppercase}
 .champion{text-align:center;padding:25px;background:white;border:1px solid #e5e7eb;border-radius:18px;margin-bottom:18px}
 .footer{text-align:center;color:#9ca3af;font-size:12px;margin-top:35px}
 @media(max-width:600px){.hero h1{font-size:34px}.app{padding-left:12px;padding-right:12px}.card{border-radius:16px}.top{padding-top:12px}.match-top{align-items:flex-start;flex-direction:column}.score{width:100%}.score input{flex:1;width:auto}}
+
+/* Hintergrund-Themes */
+body.theme-dartboard,
+body.theme-darts {
+  color:#f3f4f6;
+  background:#07101b;
+}
+body.theme-dartboard::before,
+body.theme-darts::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-2;
+  pointer-events:none;
+  background:
+    linear-gradient(180deg,rgba(3,8,15,.48),rgba(3,8,15,.86)),
+    radial-gradient(circle at 50% 18%,rgba(255,255,255,.12),transparent 28%),
+    #07101b;
+}
+body.theme-dartboard::after,
+body.theme-darts::after{
+  content:"";
+  position:fixed;
+  z-index:-1;
+  pointer-events:none;
+  width:min(820px,95vw);
+  aspect-ratio:1;
+  left:50%;
+  top:42%;
+  transform:translate(-50%,-50%);
+  opacity:.30;
+  border-radius:50%;
+  background:
+    radial-gradient(circle at center, #b91c1c 0 4%, #111827 4.5% 7%, transparent 7.5%),
+    conic-gradient(from -9deg,#111827 0 5%,#e5e7eb 5% 10%,#111827 10% 15%,#e5e7eb 15% 20%,#111827 20% 25%,#e5e7eb 25% 30%,#111827 30% 35%,#e5e7eb 35% 40%,#111827 40% 45%,#e5e7eb 45% 50%,#111827 50% 55%,#e5e7eb 55% 60%,#111827 60% 65%,#e5e7eb 65% 70%,#111827 70% 75%,#e5e7eb 75% 80%,#111827 80% 85%,#e5e7eb 85% 90%,#111827 90% 95%,#e5e7eb 95% 100%);
+  box-shadow:0 0 80px rgba(0,0,0,.8),inset 0 0 45px rgba(0,0,0,.65);
+}
+body.theme-darts::after{
+  width:min(760px,95vw);height:520px;aspect-ratio:auto;top:52%;
+  border-radius:42% 58% 35% 65% / 55% 35% 65% 45%;
+  transform:translate(-50%,-50%) rotate(-12deg);
+  background:
+    radial-gradient(ellipse at 70% 45%,rgba(220,38,38,.72) 0 5%,transparent 6%),
+    linear-gradient(115deg,transparent 0 34%,rgba(220,38,38,.75) 34% 39%,transparent 39% 47%,rgba(229,231,235,.78) 47% 52%,transparent 52% 100%),
+    radial-gradient(ellipse at 50% 50%,rgba(156,163,175,.4),transparent 44%);
+  filter:blur(1px);
+}
+body.theme-dartboard .top,
+body.theme-darts .top{background:rgba(7,16,27,.72);backdrop-filter:blur(16px)}
+body.theme-dartboard .card,
+body.theme-darts .card,
+body.theme-dartboard .group,
+body.theme-darts .group,
+body.theme-dartboard .champion,
+body.theme-darts .node{background:rgba(17,24,39,.72);border-color:rgba(148,163,184,.24);box-shadow:0 8px 28px rgba(0,0,0,.22)}
+body.theme-dartboard .grouphead,
+body.theme-darts .grouphead,
+body.theme-dartboard .player,
+body.theme-darts .player,
+body.theme-dartboard .check,
+body.theme-darts .check{background:rgba(31,41,55,.62);border-color:rgba(148,163,184,.22)}
+body.theme-dartboard .muted,
+body.theme-darts .muted{color:#cbd5e1}
+body.theme-dartboard .secondary,
+body.theme-darts .secondary,
+body.theme-dartboard .tab{background:rgba(15,23,42,.75);color:#f8fafc;border-color:rgba(148,163,184,.3)}
+body.theme-dartboard .field input,
+body.theme-dartboard .field select,
+body.theme-darts .field input,
+body.theme-darts .field select,
+body.theme-dartboard .score input,
+body.theme-darts .score input{background:rgba(15,23,42,.9);color:#f8fafc;border-color:rgba(148,163,184,.3)}
+
+.background-picker{margin-top:18px}
+.background-picker .picker-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.background-picker .picker-head h3{margin:0}
+.theme-options{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.theme-option{position:relative;padding:0;background:transparent;border:2px solid transparent;border-radius:16px;text-align:left;color:inherit;overflow:hidden}
+.theme-option.active{border-color:#10b981;box-shadow:0 0 0 2px rgba(16,185,129,.15)}
+.theme-thumb{height:92px;border-radius:13px;position:relative;overflow:hidden;border:1px solid #334155;background:#111827}
+.theme-thumb.simple{background:linear-gradient(135deg,#111827,#1f2937)}
+.theme-thumb.board{background:radial-gradient(circle at center,#b91c1c 0 7%,#111827 7.5% 11%,transparent 11.5%),conic-gradient(#111827 0 8%,#e5e7eb 8% 16%,#15803d 16% 24%,#111827 24% 32%,#dc2626 32% 40%,#111827 40% 48%,#e5e7eb 48% 56%,#15803d 56% 64%,#111827 64% 72%,#dc2626 72% 80%,#111827 80% 88%,#e5e7eb 88% 96%,#15803d 96%);}
+.theme-thumb.board::after{content:"";position:absolute;inset:9px;border:4px solid rgba(0,0,0,.55);border-radius:50%}
+.theme-thumb.darts{background:radial-gradient(ellipse at 70% 35%,#ef4444 0 10%,transparent 11%),linear-gradient(115deg,transparent 0 35%,#e5e7eb 35% 43%,transparent 43% 49%,#dc2626 49% 57%,transparent 57%),linear-gradient(135deg,#111827,#475569)}
+.theme-thumb.darts::after{content:"";position:absolute;width:110%;height:8px;left:-5%;top:48%;background:#d1d5db;transform:rotate(-18deg);box-shadow:0 14px 0 #ef4444}
+.theme-label{display:block;padding:7px 4px 2px;font-size:13px;font-weight:800}
+.theme-check{position:absolute;right:8px;top:8px;width:23px;height:23px;border-radius:50%;display:none;align-items:center;justify-content:center;background:#10b981;color:white;font-size:14px;font-weight:900}
+.theme-option.active .theme-check{display:flex}
+.background-button{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:14px;background:rgba(255,255,255,.04);border:1px solid #334155;color:inherit;text-align:left}
+.background-button:hover{border-color:#64748b}
+.theme-modal{position:fixed;inset:0;background:rgba(2,6,23,.72);backdrop-filter:blur(8px);display:flex;align-items:flex-end;justify-content:center;padding:16px;z-index:50}
+.theme-sheet{width:min(720px,100%);background:#0f172a;color:#f8fafc;border:1px solid #334155;border-radius:24px;padding:18px;box-shadow:0 24px 80px rgba(0,0,0,.45)}
+.theme-sheet .theme-options{margin-top:15px}
+.theme-sheet-close{background:transparent;color:#cbd5e1;padding:5px 9px;font-size:22px}
+@media(min-width:700px){.theme-modal{align-items:center}.theme-sheet{border-radius:22px}}
+@media(max-width:520px){.theme-options{gap:7px}.theme-thumb{height:76px}.theme-label{font-size:12px}.background-picker{margin-top:14px}}
