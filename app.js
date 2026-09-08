@@ -397,20 +397,23 @@ async function posterCanvas(t){
  const groupRowH=42, groupHeadH=78;
  const groupHeights=groupRows.map(rows=>groupHeadH+rows.length*groupRowH+18);
  const groupsH=groups.length?62+groupHeights.reduce((a,h)=>a+h+14,0):0;
- const statsRowH=52;
- const statsH=stats.length?62+stats.length*statsRowH+18:0;
- // Compact, smartphone-first KO tree. Rounds are columns with connectors; no all-match list or separate placement block.
- const koTitleH=62;
- const koCardH=66, koGap=26, koPadTop=18, koPadBottom=22;
+ const statsRowH=56;
+ const statsH=stats.length?68+stats.length*statsRowH+18:0;
+ const koTitleH=66;
+ const koCardH=70, koGap=30, koPadTop=20, koPadBottom=24;
  const koMax=Math.max(1,...koRounds.map(r=>r.matches.length));
- const koH=koRounds.length?koTitleH+koPadTop+koMax*koCardH+(koMax-1)*koGap+koPadBottom:0;
- const podiumH=placement.first?156:0;
- const headerH=178, footerH=42, totalH=headerH+podiumH+groupsH+koH+statsH+footerH+40;
- const c=document.createElement('canvas'); c.width=W; c.height=Math.max(1400,Math.ceil(totalH));
+ const koTreeH=koRounds.length?Math.max(150,koMax*koCardH+(koMax-1)*koGap):0;
+ const thirdH=t.ko?.thirdPlace?92:0;
+ const koH=koRounds.length?koTitleH+koPadTop+koTreeH+koPadBottom+thirdH+16:0;
+ // Winner is deliberately separated from runner-up / third-place cards.
+ const podiumH=placement.first?206:0;
+ const headerH=178, footerH=42;
+ const totalH=headerH+podiumH+groupsH+koH+statsH+footerH+40;
+ const c=document.createElement('canvas'); c.width=W; c.height=Math.max(1200,Math.ceil(totalH));
  const ctx=c.getContext('2d'); ctx.imageSmoothingEnabled=true;
  ctx.fillStyle='#07101b';ctx.fillRect(0,0,W,c.height);
- if(bg.complete&&bg.naturalWidth){const scale=Math.max(W/bg.naturalWidth,c.height/bg.naturalHeight);const iw=bg.naturalWidth*scale,ih=bg.naturalHeight*scale;ctx.globalAlpha=.22;ctx.drawImage(bg,(W-iw)/2,(c.height-ih)/2,iw,ih);ctx.globalAlpha=1}
- ctx.fillStyle='rgba(2,7,15,.60)';ctx.fillRect(0,0,W,c.height);
+ if(bg.complete&&bg.naturalWidth){const scale=Math.max(W/bg.naturalWidth,c.height/bg.naturalHeight);const iw=bg.naturalWidth*scale,ih=bg.naturalHeight*scale;ctx.globalAlpha=.20;ctx.drawImage(bg,(W-iw)/2,(c.height-ih)/2,iw,ih);ctx.globalAlpha=1}
+ ctx.fillStyle='rgba(2,7,15,.64)';ctx.fillRect(0,0,W,c.height);
  let y=28;
  text('🎯 DART-TURNIER',pad,y+30,38,'950','#fff');
  text(t.name||'Turnier',pad,y+78,29,'850','#f8fafc');
@@ -418,21 +421,23 @@ async function posterCanvas(t){
  info.forEach((v,i)=>text(v,pad+i*300,y+122,16,'800',i===0?'#fed7aa':'#dbe4ef'));
  y=headerH;
  if(placement.first){
-   const ph=140;
-   panel(pad,y,contentW,ph,.90);
-   text('🏆',W/2,y+28,34,'900','#fff','center');
-   text('TURNIERSIEGER',W/2,y+58,15,'950','#fed7aa','center');
-   text(placement.first,W/2,y+91,30,'950','#fff','center');
-   const second=placement.second||'—', third=placement.third||'—';
-   const by= y+121, bw=(contentW-32)/2;
-   roundedRect(pad+10,by-14,bw,30,10);ctx.fillStyle='rgba(255,255,255,.07)';ctx.fill();
-   roundedRect(pad+22+bw,by-14,bw,30,10);ctx.fillStyle='rgba(255,255,255,.07)';ctx.fill();
-   text(`🥈 ${second}`,pad+24+bw/2,by,14,'850','#e5e7eb','center');
-   text(`🥉 ${third}`,pad+36+bw+bw/2,by,14,'850','#e5e7eb','center');
+   const winnerH=108, boxGap=12, smallH=70;
+   panel(pad,y,contentW,winnerH,.92);
+   text('🏆',W/2,y+25,32,'900','#fff','center');
+   text('TURNIERSIEGER',W/2,y+51,14,'950','#fed7aa','center');
+   text(placement.first,W/2,y+82,29,'950','#fff','center');
+   const second=placement.second||'—', third=placement.third||'Nicht ausgespielt';
+   const by=y+winnerH+boxGap, bw=(contentW-boxGap)/2;
+   roundedRect(pad,by,bw,smallH,14);ctx.fillStyle='rgba(148,163,184,.12)';ctx.fill();ctx.strokeStyle='rgba(203,213,225,.35)';ctx.lineWidth=2;ctx.stroke();
+   roundedRect(pad+bw+boxGap,by,bw,smallH,14);ctx.fillStyle='rgba(251,146,60,.10)';ctx.fill();ctx.strokeStyle='rgba(251,146,60,.38)';ctx.lineWidth=2;ctx.stroke();
+   text('🥈  2. PLATZ',pad+16,by+21,13,'900','#cbd5e1');
+   text(second,pad+16,by+47,18,'850','#fff');
+   text('🥉  3. PLATZ',pad+bw+boxGap+16,by+21,13,'900','#fed7aa');
+   text(third,pad+bw+boxGap+16,by+47,18,'850','#fff');
    y+=podiumH;
  }
  if(groups.length){
-   text('GRUPPENPHASE',pad,y+26,26,'950','#fff'); y+=58;
+   text('GRUPPENPHASE',pad,y+27,26,'950','#fff'); y+=62;
    groups.forEach((g,gi)=>{
      const rows=groupRows[gi], gh=groupHeights[gi]; panel(pad,y,contentW,gh,.92);
      text(g.name,pad+20,y+25,23,'900','#fff');
@@ -452,58 +457,90 @@ async function posterCanvas(t){
    });
  }
  if(koRounds.length){
-   text('KO-PHASE',pad,y+26,26,'950','#fff'); y+=koTitleH;
+   text('KO-PHASE',pad,y+27,26,'950','#fff'); y+=koTitleH;
    const innerX=pad+8, innerW=contentW-16;
-   const colW=Math.min(250,(innerW-(koRounds.length-1)*18)/koRounds.length);
-   const gap=(innerW-colW*koRounds.length)/(koRounds.length-1||1);
+   const colGap=34, colW=Math.min(270,(innerW-(koRounds.length-1)*colGap)/koRounds.length);
+   const totalTreeW=colW*koRounds.length+colGap*(koRounds.length-1);
+   const leftStart=innerX+(innerW-totalTreeW)/2;
    const positions=[];
+   // Use a stable slot grid. Every later round is centered between its feeder matches.
+   const slotStep=koCardH+koGap;
    koRounds.forEach((r,ri)=>{
-     const x=innerX+ri*(colW+gap), count=r.matches.length;
-     const step=koMax>1 ? (koMax*koCardH+(koMax-1)*koGap-koCardH)/(Math.max(1,koMax-1)) : 0;
-     const offset=(koMax-count)*step/2;
+     const x=leftStart+ri*(colW+colGap);
      positions[ri]=[];
+     const count=r.matches.length;
+     let ys=[];
+     if(ri===0){
+       const blockH=count*koCardH+Math.max(0,count-1)*koGap;
+       const top=y+koPadTop+(koTreeH-blockH)/2;
+       ys=r.matches.map((_,mi)=>top+mi*slotStep);
+     }else{
+       // Center each destination between the two feeder slots. For odd / custom rounds, use proportional spacing.
+       const prev=positions[ri-1];
+       if(prev.length===count*2){
+         ys=r.matches.map((_,mi)=>((prev[mi*2].y+prev[mi*2].h/2)+(prev[mi*2+1].y+prev[mi*2+1].h/2))/2-koCardH/2);
+       }else{
+         const blockH=count*koCardH+Math.max(0,count-1)*koGap;
+         const top=y+koPadTop+(koTreeH-blockH)/2;
+         ys=r.matches.map((_,mi)=>top+mi*slotStep);
+       }
+     }
      r.matches.forEach((m,mi)=>{
-       const yy=y+koPadTop+offset+mi*step, h=koCardH;
+       const yy=ys[mi], h=koCardH;
        positions[ri][mi]={x,y:yy,w:colW,h};
-       roundedRect(x,yy,colW,h,13);ctx.fillStyle='rgba(2,6,23,.84)';ctx.fill();ctx.strokeStyle='rgba(255,255,255,.18)';ctx.lineWidth=2;ctx.stroke();
+       roundedRect(x,yy,colW,h,14);ctx.fillStyle='rgba(2,6,23,.90)';ctx.fill();ctx.strokeStyle='rgba(255,255,255,.20)';ctx.lineWidth=2;ctx.stroke();
        const wa=winnerOf(m)===m.a, wb=winnerOf(m)===m.b;
-       const nameW=colW-64;
+       const nameW=colW-66;
        text(m.a||'Noch offen',x+14,yy+21,fit(m.a||'Noch offen',nameW,15,'750'),'750',wa?'#86efac':'#f8fafc');
        text(m.sa!=null?m.sa:'—',x+colW-14,yy+21,16,'900','#fff','right');
        text(m.b||'Noch offen',x+14,yy+47,fit(m.b||'Noch offen',nameW,15,'750'),'750',wb?'#86efac':'#f8fafc');
        text(m.sb!=null?m.sb:'—',x+colW-14,yy+47,16,'900','#fff','right');
      });
    });
-   // connectors between rounds
-   ctx.strokeStyle='rgba(249,115,22,.62)';ctx.lineWidth=3;ctx.lineCap='round';
+   // Round labels above each column.
+   koRounds.forEach((r,ri)=>{
+     const x=leftStart+ri*(colW+colGap);
+     text(r.name||`Runde ${ri+1}`,x+colW/2,y+4,14,'900','#aeb9c8','center');
+   });
+   // Clean bracket connectors: horizontal from each feeder, vertical join, horizontal to destination center.
+   ctx.strokeStyle='rgba(251,146,60,.68)';ctx.lineWidth=3;ctx.lineCap='round';ctx.lineJoin='round';
    for(let ri=0;ri<positions.length-1;ri++){
      const left=positions[ri], right=positions[ri+1];
-     right.forEach((dst,di)=>{
-       const a=left[di*2], b=left[di*2+1]; if(!a||!b)return;
-       const x1=a.x+a.w, x2=dst.x, mid=(x1+x2)/2;
-       const y1=a.y+a.h/2, y2=b.y+b.h/2, yd=dst.y+dst.h/2;
-       ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(mid,y1);ctx.lineTo(mid,y2);ctx.lineTo(x2,y2);ctx.stroke();
-       ctx.beginPath();ctx.moveTo(mid,y2);ctx.lineTo(x2,y2);ctx.stroke();
-     });
+     if(right.length===left.length/2){
+       right.forEach((dst,di)=>{
+         const a=left[di*2], b=left[di*2+1];
+         if(!a||!b)return;
+         const x1=a.x+a.w, x2=dst.x, mid=x1+(x2-x1)/2;
+         const y1=a.y+a.h/2, y2=b.y+b.h/2, yd=dst.y+dst.h/2;
+         ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(mid,y1);ctx.lineTo(mid,y2);ctx.lineTo(x2,yd);ctx.stroke();
+       });
+     }else{
+       right.forEach((dst,di)=>{
+         const src=left[Math.min(di,left.length-1)]; if(!src)return;
+         const x1=src.x+src.w,x2=dst.x,ym=dst.y+dst.h/2;
+         ctx.beginPath();ctx.moveTo(x1,src.y+src.h/2);ctx.lineTo(x2,ym);ctx.stroke();
+       });
+     }
    }
-   // third place is shown compactly beneath the final if enabled
    if(t.ko?.thirdPlace){
-     const last=positions[positions.length-1]?.[0];
-     const ty=y+koMax*koCardH+(koMax-1)*koGap+koPadTop+18;
-     panel(pad,ty,contentW,82,.88); text('🥉 Platz 3',pad+18,ty+24,17,'900','#fed7aa');
-     const m=t.ko.thirdPlace; text(`${m.a||'—'}  ${m.sa??'—'} : ${m.sb??'—'}  ${m.b||'—'}`,pad+18,ty+55,17,'800','#fff');
+     const ty=y+koPadTop+koTreeH+18;
+     panel(pad,ty,contentW,82,.90);
+     text('🥉 SPIEL UM PLATZ 3',pad+18,ty+24,16,'900','#fed7aa');
+     const m=t.ko.thirdPlace;
+     text(`${m.a||'—'}   ${m.sa??'—'} : ${m.sb??'—'}   ${m.b||'—'}`,pad+18,ty+55,17,'800','#fff');
    }
    y+=koH;
  }
  if(stats.length){
-   text('SPIELERSTATISTIK',pad,y+26,26,'950','#fff'); y+=58;
+   text('SPIELERSTATISTIK',pad,y+27,26,'950','#fff'); y+=64;
    const h=statsH-18; panel(pad,y,contentW,h,.92);
    stats.forEach((st,i)=>{
      const yy=y+34+i*statsRowH;
      text(`${i+1}. ${st.p}`,pad+18,yy,17,'800','#fff');
-     text(`${st.matches} Sp. · ${st.won} S · ${st.lost} N · ${st.wonLegs}:${st.lostLegs} Legs`,pad+18,yy+22,13,'700','#cbd5e1');
-     if(t.useAverage) text(`Ø ${st.average!=null?st.average.toFixed(2):'—'}`,W-pad-18,yy+7,17,'900','#fed7aa','right');
-     if(i<stats.length-1){ctx.strokeStyle='rgba(255,255,255,.09)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(pad+18,yy+37);ctx.lineTo(W-pad-18,yy+37);ctx.stroke()}
+     text(`${st.matches} Spiele · ${st.won} Siege · ${st.lost} Niederlagen`,pad+18,yy+22,13,'700','#cbd5e1');
+     text(`${st.won} gew. Legs · ${st.lost} verl. Legs`,pad+18,yy+40,12,'650','#94a3b8');
+     if(t.useAverage) text(`Ø ${st.average!=null?st.average.toFixed(2):'—'}`,W-pad-18,yy+8,17,'900','#fed7aa','right');
+     if(i<stats.length-1){ctx.strokeStyle='rgba(255,255,255,.09)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(pad+18,yy+48);ctx.lineTo(W-pad-18,yy+48);ctx.stroke()}
    });
    y+=h;
  }

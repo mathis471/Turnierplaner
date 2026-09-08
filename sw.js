@@ -1,4 +1,4 @@
-const CACHE="dart-turnier-v5.9-modern-export";
+const CACHE="dart-turnier-v5.10-modern-export";
 const ASSETS=["./","./index.html","./style.css","./app.js","./manifest.json","./dart-background.jpg"];
 self.addEventListener("install",event=>{
  event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)).then(()=>self.skipWaiting()));
